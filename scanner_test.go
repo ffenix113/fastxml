@@ -2,6 +2,8 @@ package fastxml
 
 import (
 	"bufio"
+	"bytes"
+	"encoding/xml"
 	"fmt"
 	"io"
 	"os"
@@ -15,10 +17,11 @@ import (
 
 func TestScanTag(t *testing.T) {
 	data := `<table ID="lineitem">
-<T><L_ORDERKEY>1</L_ORDERKEY><L_PARTKEY>1552</L_PARTKEY>q`
+<T><L_ORDERKEY>1</L_ORDERKEY><L_PARTKEY>1552</L_PARTKEY>q</T></table>
+ `
 
 	sc := bufio.NewScanner(strings.NewReader(data))
-	sc.Split(ScanTag)
+	sc.Split((&Parser{}).ScanTag)
 
 	for sc.Scan() {
 		fmt.Printf("%q\n", sc.Text())
@@ -92,30 +95,82 @@ func TestNextTokenStartIndex(t *testing.T) {
 }
 
 func BenchmarkScanTag(b *testing.B) {
-	b.ReportAllocs()
-	b.SetBytes(32295475)
+	buf := prepareFileBuf(b, "testdata/large.xml")
 
-	file, err := os.Open("testdata/large.xml")
-	require.NoError(b, err)
+	b.SetBytes(int64(len(buf)))
+	b.ReportAllocs()
 
 	var lines int
 
+	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		lines = 0
-		file.Seek(0, io.SeekStart)
 
-		s := bufio.NewScanner(file)
-		s.Split(ScanTag)
+		p := NewParser(buf, false)
 
-		for s.Scan() {
-			b.Log(s.Text())
+		for {
+			_, err := p.Next()
+			if err != nil {
+				if err == io.EOF {
+					break
+				}
+				b.Fatal(err.Error())
+			}
+			//b.Log(s.Text())
 			lines++
-		}
-
-		if err := s.Err(); err != nil {
-			b.Fatalf("scan err: %s", err.Error())
 		}
 	}
 
-	assert.Equal(b, 100, lines)
+	assert.Equal(b, 3068929, lines)
+}
+
+func BenchmarkSTDXML(b *testing.B) {
+	buf := prepareFileBuf(b, "testdata/large.xml")
+	reader := bytes.NewReader(buf)
+
+	b.SetBytes(int64(len(buf)))
+	b.ReportAllocs()
+
+	var lines int
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		lines = 0
+		reader.Seek(0, io.SeekStart)
+
+		dec := xml.NewDecoder(reader)
+
+		for {
+			_, err := dec.Token()
+			if err != nil {
+				if err == io.EOF {
+					break
+				}
+				b.Fatal(err.Error())
+			}
+			//b.Log(s.Text())
+			lines++
+		}
+
+		//if err := s.Err(); err != nil {
+		//	b.Fatalf("scan err: %s", err.Error())
+		//}
+	}
+
+	assert.Equal(b, 3068929, lines)
+}
+
+func prepareFileBuf(t testing.TB, filePath string) []byte {
+	file, err := os.Open(filePath)
+	require.NoError(t, err)
+
+	size, err := file.Seek(0, io.SeekEnd)
+	require.NoError(t, err)
+	file.Seek(0, io.SeekStart)
+
+	buf := make([]byte, size)
+	io.ReadFull(file, buf)
+
+	file.Close()
+
+	return buf
 }

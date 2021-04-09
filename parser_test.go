@@ -1,6 +1,7 @@
 package fastxml
 
 import (
+	"encoding/xml"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -66,4 +67,31 @@ func TestNextNonSpaceIndex(t *testing.T) {
 			assert.Equal(t, test.idx, NextNonSpaceIndex([]byte(test.stringData)))
 		})
 	}
+}
+
+func TestParser_Next(t *testing.T) {
+	data := `<ab> some data in between</ab><a><br/>
+<br/> end value 
+`
+
+	p := NewParser([]byte(data), false)
+
+	var open []string
+
+	for {
+		token, err := p.Next()
+		if err != nil {
+			break
+		}
+
+		if openToken, ok := token.(*xml.StartElement); ok {
+			open = append(open, openToken.Name.Local)
+		}
+
+		t.Logf("%q (%#v)", token, token)
+	}
+
+	t.Log("---")
+
+	assert.Equal(t, []string{"ab", "a"}, open)
 }

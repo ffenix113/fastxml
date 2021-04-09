@@ -2,11 +2,14 @@ package fastxml
 
 import (
 	"bytes"
+	"fmt"
 	"io"
+	"unicode/utf8"
 )
 
 // ScanTag is a SplitFunc that is intended to be used with bufio.Scanner.
-func ScanTag(data []byte, atEOF bool) (advance int, token []byte, err error) {
+func (p *Parser) ScanTag(data []byte, atEOF bool) (advance int, token []byte, err error) {
+	//fmt.Println(len(data), atEOF)
 	if atEOF && len(data) == 0 {
 		return 0, nil, io.EOF
 	}
@@ -50,25 +53,35 @@ func scanFullTag(buf []byte) (int, error) {
 //
 // It is guaranteed that this function will always receive
 func scanFullCharData(buf []byte) (int, error) {
+	if len(buf) == 0 {
+		return 0, nil
+	}
+
 	var endIdx int
-
 	for {
-		wordEnd := scanTillWordEnd(buf[endIdx:])
-		if wordEnd == 0 { // Seems there are no more chars in this word
-			spaceEnd := NextNonSpaceIndex(buf[endIdx:])
-			if spaceEnd == 0 { // No more name chars and no more spaces - char data is done!
-				return endIdx, nil
-			}
-
-			endIdx += spaceEnd
-
-			continue
+		if endIdx != 0 && buf[endIdx-1] == '\\' && buf[endIdx] == '<' {
+			return endIdx, nil
 		}
-		// Append last index and move on to next chunk of data.
-		endIdx += wordEnd
+
+		rn, size := utf8.DecodeRune(buf[endIdx:])
+		if rn == utf8.RuneError {
+			switch size {
+			case 0:
+				return endIdx, nil
+			case 1:
+				return endIdx, fmt.Errorf("invalid rune on index %d", endIdx)
+			}
+		}
+
+		if !isValidChar(rn) || (rn == '<' && buf[endIdx-1] != '\\') {
+			return endIdx, nil
+		}
+
+		endIdx += size
 	}
 }
 
+// scanTillWordEnd will return index on which valid XML token name will end.
 func scanTillWordEnd(buf []byte) int {
 	if len(buf) == 0 {
 		return 0
@@ -88,6 +101,23 @@ func scanTillWordEnd(buf []byte) int {
 	return 1
 }
 
+// scanTillCharDataEnd returns index of last byte of char data.
+func scanTillCharDataEnd(buf []byte) int {
+	if len(buf) == 0 {
+		return 0
+	}
+
+	var endIdx int
+	for {
+		rn, size := utf8.DecodeRune(buf[endIdx:])
+		if !isValidChar(rn) {
+			return endIdx
+		}
+
+		endIdx += size
+	}
+}
+
 // nextTokenStartIndex checks that in current buffer there is always visible start of next tag.
 //
 // Function will check range buf[1:] to skip first byte, which can(and will be) be a tag start token.
@@ -101,6 +131,7 @@ func nextTokenStartIndex(buf []byte, searchByte byte) int {
 	openTagIdx := 1
 
 	for {
+		_ = buf[openTagIdx] // Remove bounds check for next call
 		idx := bytes.IndexByte(buf[openTagIdx:], searchByte)
 		if idx == -1 { // Not large enough buffer to get to next token beginning.
 			return -1
@@ -108,6 +139,7 @@ func nextTokenStartIndex(buf []byte, searchByte byte) int {
 
 		openTagIdx += idx
 
+		_ = buf[openTagIdx-1] // Remove bounds check for next call
 		// Simple check that tag start is not escaped
 		if buf[openTagIdx-1] != '\\' {
 			break

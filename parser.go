@@ -2,11 +2,13 @@ package fastxml
 
 import (
 	"bufio"
+	"bytes"
 	"encoding/xml"
 	"fmt"
 	"io"
 	"unicode"
 	"unicode/utf8"
+	"unsafe"
 )
 
 var _ = xml.Header
@@ -24,98 +26,147 @@ var _ = []interface{}{
 }
 
 // TokenDecoderFunc if no token can be decoded - error MUST be returned.
-type TokenDecoderFunc func([]byte) (xml.Token, int, error)
+type TokenDecoderFunc func([]byte) (xml.Token, error)
 
 // Parser currently guarantees to supports only ASCII, UTF8 might chars/sequences be broken.
 type Parser struct {
-	buf          []byte
-	currentDepth int
+	// buf holds full data to parse.
+	buf     []byte
+	scanner *bufio.Scanner
 	// currentPointer ALWAYS points to next byte that needs to be processed.
 	currentPointer int
-}
-
-func NewParser(buf []byte) *Parser {
-	s := bufio.NewScanner(nil)
-	s.Split(ScanTag)
-
-	return &Parser{
-		buf: buf,
+	// nextOffset specifies how many bytes were read on last token decoding.
+	// This value MUST be added to `currentPointer` before next call to Next.
+	nextOffset int
+	//
+	innerData struct {
+		attr         xml.Attr         // <tag name="val" another='val'>
+		charData     xml.CharData     // "text between tags"
+		comment      xml.Comment      // <!-- comment -->
+		directive    xml.Directive    // <!directive>
+		startElement xml.StartElement // <some_tag>
+		endElement   xml.EndElement   // </some_tag>
+		procInst     xml.ProcInst     // <?xmxl encoding="UTF-8" ?>
 	}
 }
 
-func NewParserFromReader(r io.ReadSeeker) *Parser {
-	size := seekerSize(r)
+// NewParser will create a parser from input bytes.
+//
+// Parser MUST own provided buffer, so if input buffer must be modified outside of the parer -
+// set `mustCopy` to true and parser will copy full buffer to new slice and will use that.
+func NewParser(buf []byte, mustCopy bool) *Parser {
+	if mustCopy {
+		newBuf := make([]byte, len(buf), len(buf))
+		copy(newBuf, buf)
 
-	scanner := bufio.NewScanner(r)
-	// Allocate large enough slice of bytes for the buffer
-	buf := make([]byte, size, size)
-	scanner.Buffer(buf, size)
-	scanner.Split(ScanTag)
-
-	return nil
-}
-
-func seekerSize(s io.Seeker) int {
-	size, err := s.Seek(0, io.SeekEnd)
-	if err != nil {
-		panic(err)
+		buf = newBuf
 	}
-	_, _ = s.Seek(0, io.SeekStart)
 
-	return int(size)
+	scanner := bufio.NewScanner(bytes.NewReader(buf))
+	scanner.Buffer(buf, len(buf))
+
+	p := Parser{
+		buf:     buf,
+		scanner: scanner,
+	}
+
+	scanner.Split(p.ScanTag)
+
+	return &p
 }
 
+// Next will return next token and error, if any.
+//
+// Caller MUST NOT hold onto returned tokens. Instead it may store data from them, but don't hold onto pointers.
 func (p *Parser) Next() (xml.Token, error) {
-	token, _, err := p.decodeToken(p.buf[p.currentPointer:])
+	p.currentPointer += p.nextOffset
 
-	return token, err
+	if !p.scanner.Scan() {
+		return nil, io.EOF // p.scanner.Err()
+	}
+
+	return p.decodeToken(p.scanner.Bytes())
 }
 
-func (p *Parser) decodeToken(buf []byte) (xml.Token, int, error) {
+func (p *Parser) decodeToken(buf []byte) (xml.Token, error) {
 	if len(buf) == 0 {
-		return nil, 0, io.ErrUnexpectedEOF
+		return nil, io.ErrUnexpectedEOF
 	}
 
 	var decodeFunc TokenDecoderFunc
 	switch {
-	case len(buf) >= 3 && buf[0] == '<' && isNameStartChar(rune(buf[1])):
-		decodeFunc = p.decodeSimpleTag
 	case len(buf) >= 3 && buf[0] == '<' && buf[1] == '/':
-		//decodeFunc = p.decodeClosingTag
+		decodeFunc = p.decodeClosingTag
 	case len(buf) >= 7 && buf[0] == '<' && buf[1] == '!' && buf[2] == '-' && buf[3] == '-':
 		//decodeFunc = p.decodeComment
 	case len(buf) >= 3 && buf[0] == '<' && buf[1] == '?' && isNameStartChar(rune(buf[3])):
 		//decodeFunc = p.decodeProlog // Let's not support this for now.
 	case buf[0] == '<': // This will be our "catch-all" decoder.
-		decodeFunc = p.decodeTag
-	case isNameChar(rune(buf[0])) || unicode.IsSpace(rune(buf[0])):
+		decodeFunc = p.decodeSimpleTag
+	case isValidChar(rune(buf[0])):
 		decodeFunc = p.decodeString
 	default:
 		// We don't know how to handle this case, so return an error.
-		return nil, p.currentPointer, fmt.Errorf("next byte is not valid: %q", buf[0])
+		return nil, fmt.Errorf("next byte is not valid: %q", buf[0])
 	}
 
-	token, offset, err := decodeFunc(buf)
+	token, err := decodeFunc(buf)
 	if err != nil {
-		return nil, 0, err
+		return nil, err
 	}
 
-	p.currentPointer += offset
-
-	return token, p.currentPointer, nil
+	return token, nil
 }
 
 // decodeTag is anything
-func (p *Parser) decodeTag(buf []byte) (xml.Token, int, error) {
-	return nil, 0, nil
+func (p *Parser) decodeTag(buf []byte) (xml.Token, error) {
+	return nil, nil
 }
 
-func (p *Parser) decodeString(buf []byte) (xml.Token, int, error) {
-	return nil, 0, nil
+// decodeClosingTag is anything
+func (p *Parser) decodeClosingTag(buf []byte) (xml.Token, error) {
+	p.innerData.endElement.Name.Local = unsafeByteToString(buf[2 : len(buf)-1])
+
+	return &p.innerData.endElement, nil
 }
 
-func (p *Parser) decodeSimpleTag(buf []byte) (xml.Token, int, error) {
-	return nil, 0, nil
+func (p *Parser) decodeString(buf []byte) (xml.Token, error) {
+	p.innerData.charData = buf
+
+	return &p.innerData.charData, nil
+}
+
+func (p *Parser) decodeSimpleTag(buf []byte) (xml.Token, error) {
+	tagNameIdx := scanTillWordEnd(buf[1:])
+
+	p.innerData.startElement.Name.Local = unsafeByteToString(buf[1 : tagNameIdx+1])
+
+	if buf[tagNameIdx+1] == '>' {
+		return &p.innerData.startElement, nil
+	}
+
+	// Attributes are present, fetch them.
+	numAttrs := bytes.Count(buf, []byte{'='})
+	if len(p.innerData.startElement.Attr) < numAttrs {
+		p.innerData.startElement.Attr = make([]xml.Attr, numAttrs, numAttrs)
+		for i := range p.innerData.startElement.Attr {
+			p.innerData.startElement.Attr[i].Name = xml.Name{}
+		}
+	}
+
+	attrIdx := tagNameIdx + 1
+	for i := 0; i < numAttrs; i++ {
+		attrStart, attrEnd, err := NextWordIndex(buf[NextNonSpaceIndex(buf[attrIdx:]):])
+		if err != nil {
+			return nil, err
+		}
+
+		attrName := unsafeByteToString(buf[attrIdx+attrStart : attrIdx+attrEnd])
+
+		p.innerData.startElement.Attr[i].Name.Local = attrName
+	}
+
+	return nil, nil
 }
 
 // NextWordIndex returns two offsets: for start and the end of the word.
@@ -174,4 +225,17 @@ func isNameStartChar(rn rune) bool {
 func isNameChar(rn rune) bool {
 	return isNameStartChar(rn) || rn == '-' || rn == '.' ||
 		('0' <= rn && rn <= '9')
+}
+
+func isValidChar(rn rune) bool {
+	return rn == 0x09 ||
+		rn == 0x0A ||
+		rn == 0x0D ||
+		rn >= 0x20 && rn <= 0xD7FF ||
+		rn >= 0xE000 && rn <= 0xFFFD ||
+		rn >= 0x10000 && rn <= 0x10FFFF
+}
+
+func unsafeByteToString(b []byte) string {
+	return *(*string)(unsafe.Pointer(&b))
 }
