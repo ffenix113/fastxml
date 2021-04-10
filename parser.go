@@ -21,7 +21,7 @@ var _ = []interface{}{
 	xml.Directive{},    // <!directive>
 	xml.StartElement{}, // <some_tag>
 	xml.EndElement{},   // </some_tag>
-	xml.ProcInst{},     // <?xmxl encoding="UTF-8" ?>
+	xml.ProcInst{},     // <?xml encoding="UTF-8" ?>
 	// CDATA			// <![CDATA[...]]> - where '...' is raw string, no parsing.
 }
 
@@ -99,8 +99,13 @@ func (p *Parser) decodeToken(buf []byte) (xml.Token, error) {
 		decodeFunc = p.decodeClosingTag
 	case len(buf) >= 7 && buf[0] == '<' && buf[1] == '!' && buf[2] == '-' && buf[3] == '-':
 		//decodeFunc = p.decodeComment
+		panic("unknown implementation for comment")
+	case len(buf) >= 11 && buf[0] == '<' && buf[1] == '!' && buf[2] == '[':
+		// This is CDATA
+		panic("unknown implementation for CDATA")
 	case len(buf) >= 3 && buf[0] == '<' && buf[1] == '?' && isNameStartChar(rune(buf[3])):
 		//decodeFunc = p.decodeProlog // Let's not support this for now.
+		panic("unknown implementation!")
 	case buf[0] == '<': // This will be our "catch-all" decoder.
 		decodeFunc = p.decodeSimpleTag
 	case isValidChar(rune(buf[0])):
