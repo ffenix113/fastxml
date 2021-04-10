@@ -15,7 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestScanTag(t *testing.T) {
+func TestParser_ScanTag(t *testing.T) {
 	data := `<table ID="lineitem">
 <T><L_ORDERKEY>1</L_ORDERKEY><L_PARTKEY>1552</L_PARTKEY>q</T></table>
  `
@@ -34,7 +34,7 @@ func TestScanTag(t *testing.T) {
 	// "\n"
 	// "<dd a='b'>"
 	// "  aa a <\n"
-	// "</dd>"
+	// "</dd>".
 }
 
 func TestScanFullCharData(t *testing.T) {

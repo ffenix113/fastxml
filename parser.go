@@ -1,8 +1,6 @@
 package fastxml
 
 import (
-	"bufio"
-	"bytes"
 	"encoding/xml"
 	"fmt"
 	"io"
@@ -31,8 +29,7 @@ type TokenDecoderFunc func([]byte) (xml.Token, error)
 // Parser currently guarantees to supports only ASCII, UTF8 might chars/sequences be broken.
 type Parser struct {
 	// buf holds full data to parse.
-	buf     []byte
-	scanner *bufio.Scanner
+	buf []byte
 	// currentPointer ALWAYS points to next byte that needs to be processed.
 	currentPointer int
 	// nextOffset specifies how many bytes were read on last token decoding.
@@ -62,15 +59,12 @@ func NewParser(buf []byte, mustCopy bool) *Parser {
 		buf = newBuf
 	}
 
-	scanner := bufio.NewScanner(bytes.NewReader(buf))
-	scanner.Buffer(buf, len(buf))
-
-	p := Parser{
-		buf:     buf,
-		scanner: scanner,
+	if len(buf) != cap(buf) {
+		buf = buf[:len(buf):len(buf)]
 	}
-
-	scanner.Split(p.ScanTag)
+	p := Parser{
+		buf: buf,
+	}
 
 	return &p
 }
@@ -80,12 +74,22 @@ func NewParser(buf []byte, mustCopy bool) *Parser {
 // Caller MUST NOT hold onto returned tokens. Instead it may store data from them, but don't hold onto pointers.
 func (p *Parser) Next() (xml.Token, error) {
 	p.currentPointer += p.nextOffset
-
-	if !p.scanner.Scan() {
-		return nil, io.EOF // p.scanner.Err()
+	if p.currentPointer >= len(p.buf) {
+		return nil, io.EOF
 	}
 
-	return p.decodeToken(p.scanner.Bytes())
+	tokenBytes, err := FetchNextToken(p.buf[p.currentPointer:])
+	if err != nil {
+		return nil, err
+	}
+
+	p.nextOffset = len(tokenBytes)
+
+	//if !p.scanner.Scan() {
+	//	return nil, io.EOF // p.scanner.Err()
+	//}
+
+	return p.decodeToken(tokenBytes)
 }
 
 func (p *Parser) decodeToken(buf []byte) (xml.Token, error) {
@@ -144,34 +148,28 @@ func (p *Parser) decodeString(buf []byte) (xml.Token, error) {
 func (p *Parser) decodeSimpleTag(buf []byte) (xml.Token, error) {
 	tagNameIdx := scanTillWordEnd(buf[1:])
 
-	p.innerData.startElement.Name.Local = unsafeByteToString(buf[1 : tagNameIdx+1])
-
 	if buf[tagNameIdx+1] == '>' {
+		p.innerData.startElement.Name.Local = unsafeByteToString(p.buf[p.currentPointer+1 : p.currentPointer+tagNameIdx+1])
+		//			buf[1 : tagNameIdx+1])
+
 		return &p.innerData.startElement, nil
 	}
 
-	// Attributes are present, fetch them.
-	numAttrs := bytes.Count(buf, []byte{'='})
-	if len(p.innerData.startElement.Attr) < numAttrs {
-		p.innerData.startElement.Attr = make([]xml.Attr, numAttrs, numAttrs)
-		for i := range p.innerData.startElement.Attr {
-			p.innerData.startElement.Attr[i].Name = xml.Name{}
-		}
-	}
-
-	attrIdx := tagNameIdx + 1
-	for i := 0; i < numAttrs; i++ {
-		attrStart, attrEnd, err := NextWordIndex(buf[NextNonSpaceIndex(buf[attrIdx:]):])
-		if err != nil {
-			return nil, err
-		}
-
-		attrName := unsafeByteToString(buf[attrIdx+attrStart : attrIdx+attrEnd])
-
-		p.innerData.startElement.Attr[i].Name.Local = attrName
-	}
+	// Currently we are not supporting attributes.
+	// Plan is to have some sort of a function that will parse attributes on demand.
 
 	return nil, nil
+}
+
+// CopyString will return copy of the input string.
+//
+// Call this function if you would like to get a copy of a string provided in a Token.
+// Otherwise string that would be taken by caller without passing it through this function
+// might be changed after last token will be retrieved by Parser.
+//
+// This is required because in some cases data might be wrapped by `bufio.Scanner`.
+func CopyString(s string) string {
+	return string([]byte(s))
 }
 
 // NextWordIndex returns two offsets: for start and the end of the word.

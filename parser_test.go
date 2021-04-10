@@ -2,7 +2,9 @@ package fastxml
 
 import (
 	"encoding/xml"
+	"reflect"
 	"testing"
+	"unsafe"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -86,6 +88,7 @@ func TestParser_Next(t *testing.T) {
 
 		if openToken, ok := token.(*xml.StartElement); ok {
 			open = append(open, openToken.Name.Local)
+			//t.Logf("added: %p: %#v", &openToken.Name.Local, *(*reflect.StringHeader)(unsafe.Pointer(&openToken.Name.Local)))
 		}
 
 		t.Logf("%q (%#v)", token, token)
@@ -93,5 +96,8 @@ func TestParser_Next(t *testing.T) {
 
 	t.Log("---")
 
+	for i := range open {
+		t.Logf("after: %p: %#v", &open[i], *(*reflect.StringHeader)(unsafe.Pointer(&open[i])))
+	}
 	assert.Equal(t, []string{"ab", "a"}, open)
 }

@@ -7,9 +7,40 @@ import (
 	"unicode/utf8"
 )
 
+// FetchNextToken will return next tag bytes.
+//
+// Next call to this method must be advanced by the length of the previously returned bytes.
+func FetchNextToken(buf []byte) (data []byte, err error) {
+	if len(buf) == 0 {
+		return nil, nil
+	}
+
+	// tagEnd specifies index of end of the tag.
+	// Value of 0 tells that not enough data was fed to fetch full tag.
+	var tagEnd int
+
+	nextByte := buf[0]
+	switch {
+	case nextByte == '<': // All XML tags start with '<'.
+		tagEnd, err = scanFullTag(buf)
+	default: // Treat as text.
+		tagEnd, err = scanFullCharData(buf)
+	}
+
+	if err != nil {
+		return nil, err
+	}
+
+	if tagEnd == 0 {
+		return nil, nil
+	}
+
+	return buf[:tagEnd], nil
+}
+
 // ScanTag is a SplitFunc that is intended to be used with bufio.Scanner.
 func (p *Parser) ScanTag(data []byte, atEOF bool) (advance int, token []byte, err error) {
-	//fmt.Println(len(data), atEOF)
+	// Fmt.Println(len(data), atEOF).
 	if atEOF && len(data) == 0 {
 		return 0, nil, io.EOF
 	}
@@ -18,17 +49,15 @@ func (p *Parser) ScanTag(data []byte, atEOF bool) (advance int, token []byte, er
 		return 0, nil, nil
 	}
 
-	//nextWord := NextNonSpaceIndex(data)
-
 	// tagEnd specifies index of end of the tag.
 	// Value of 0 tells that not enough data was fed to fetch full tag.
 	var tagEnd int
 
 	nextByte := data[0]
 	switch {
-	case nextByte == '<': // All XML tags start with '<'
+	case nextByte == '<': // All XML tags start with '<'.
 		tagEnd, err = scanFullTag(data)
-	default: // Treat as text
+	default: // Treat as text.
 		tagEnd, err = scanFullCharData(data)
 	}
 
@@ -40,18 +69,20 @@ func (p *Parser) ScanTag(data []byte, atEOF bool) (advance int, token []byte, er
 		return 0, nil, nil
 	}
 
+	p.nextOffset = tagEnd
+
 	return tagEnd, data[:tagEnd], nil
 }
 
-// scanFullTag
+// scanFullTag.
 func scanFullTag(buf []byte) (int, error) {
-	// not implemented yet
+	// Not implemented yet.
 	return nextTokenStartIndex(buf, '>') + 1, nil
 }
 
 // scanFulLCharData will return end index of char data.
 //
-// It is guaranteed that this function will always receive
+// It is guaranteed that this function will always receive.
 func scanFullCharData(buf []byte) (int, error) {
 	if len(buf) == 0 {
 		return 0, nil
