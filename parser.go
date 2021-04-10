@@ -98,13 +98,13 @@ func (p *Parser) decodeToken(buf []byte) (xml.Token, error) {
 	case len(buf) >= 3 && buf[0] == '<' && buf[1] == '/':
 		decodeFunc = p.decodeClosingTag
 	case len(buf) >= 7 && buf[0] == '<' && buf[1] == '!' && buf[2] == '-' && buf[3] == '-':
-		//decodeFunc = p.decodeComment
+		// decodeFunc = p.decodeComment
 		panic("unknown implementation for comment")
 	case len(buf) >= 11 && buf[0] == '<' && buf[1] == '!' && buf[2] == '[':
 		// This is CDATA
 		panic("unknown implementation for CDATA")
 	case len(buf) >= 3 && buf[0] == '<' && buf[1] == '?' && isNameStartChar(rune(buf[3])):
-		//decodeFunc = p.decodeProlog // Let's not support this for now.
+		// decodeFunc = p.decodeProlog // Let's not support this for now.
 		panic("unknown implementation!")
 	case buf[0] == '<': // This will be our "catch-all" decoder.
 		decodeFunc = p.decodeSimpleTag
@@ -123,12 +123,12 @@ func (p *Parser) decodeToken(buf []byte) (xml.Token, error) {
 	return token, nil
 }
 
-// decodeTag is anything
+// decodeTag is anything.
 func (p *Parser) decodeTag(buf []byte) (xml.Token, error) {
 	return nil, nil
 }
 
-// decodeClosingTag is anything
+// decodeClosingTag is anything.
 func (p *Parser) decodeClosingTag(buf []byte) (xml.Token, error) {
 	p.innerData.endElement.Name.Local = unsafeByteToString(buf[2 : len(buf)-1])
 

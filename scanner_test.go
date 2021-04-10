@@ -4,15 +4,15 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/xml"
+	"errors"
 	"fmt"
 	"io"
 	"os"
 	"strings"
 	"testing"
 
-	"github.com/stretchr/testify/require"
-
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestScanTag(t *testing.T) {
@@ -103,6 +103,7 @@ func BenchmarkScanTag(b *testing.B) {
 	var lines int
 
 	b.ResetTimer()
+
 	for i := 0; i < b.N; i++ {
 		lines = 0
 
@@ -111,12 +112,13 @@ func BenchmarkScanTag(b *testing.B) {
 		for {
 			_, err := p.Next()
 			if err != nil {
-				if err == io.EOF {
+				if errors.Is(err, io.EOF) {
 					break
 				}
+
 				b.Fatal(err.Error())
 			}
-			//b.Log(s.Text())
+			// B.Log(s.Text()).
 			lines++
 		}
 	}
@@ -132,9 +134,12 @@ func BenchmarkSTDXML(b *testing.B) {
 	b.ReportAllocs()
 
 	var lines int
+
 	b.ResetTimer()
+
 	for i := 0; i < b.N; i++ {
 		lines = 0
+
 		reader.Seek(0, io.SeekStart)
 
 		dec := xml.NewDecoder(reader)
@@ -142,29 +147,28 @@ func BenchmarkSTDXML(b *testing.B) {
 		for {
 			_, err := dec.Token()
 			if err != nil {
-				if err == io.EOF {
+				if errors.Is(err, io.EOF) {
 					break
 				}
+
 				b.Fatal(err.Error())
 			}
-			//b.Log(s.Text())
+
 			lines++
 		}
-
-		//if err := s.Err(); err != nil {
-		//	b.Fatalf("scan err: %s", err.Error())
-		//}
 	}
 
 	assert.Equal(b, 3068929, lines)
 }
 
-func prepareFileBuf(t testing.TB, filePath string) []byte {
+func prepareFileBuf(tb testing.TB, filePath string) []byte {
+	tb.Helper()
+
 	file, err := os.Open(filePath)
-	require.NoError(t, err)
+	require.NoError(tb, err)
 
 	size, err := file.Seek(0, io.SeekEnd)
-	require.NoError(t, err)
+	require.NoError(tb, err)
 	file.Seek(0, io.SeekStart)
 
 	buf := make([]byte, size)
