@@ -81,8 +81,8 @@ func TestNextTokenStartIndex(t *testing.T) {
 		{"", "   ", -1},
 		{"", "  dasd   ", -1},
 		{"", " <", 1},
-		{"", `<aa dad=aa>\< this is a char data<`, 33},
-		{"", `<aa dad=aa>\<\<\<<`, 17},
+		{"", `<aa dad=aa>this is a char data<`, 30},
+		{"", `<aa dad=aa><`, 11},
 	}
 
 	for _, test := range tests {

@@ -59,10 +59,6 @@ func scanFullCharData(buf []byte) (int, error) {
 
 	var endIdx int
 	for {
-		if endIdx != 0 && buf[endIdx-1] == '\\' && buf[endIdx] == '<' {
-			return endIdx, nil
-		}
-
 		rn, size := utf8.DecodeRune(buf[endIdx:])
 		if rn == utf8.RuneError {
 			switch size {
@@ -73,7 +69,7 @@ func scanFullCharData(buf []byte) (int, error) {
 			}
 		}
 
-		if !isValidChar(rn) || (rn == '<' && buf[endIdx-1] != '\\') {
+		if !isValidChar(rn) || rn == '<' {
 			return endIdx, nil
 		}
 
@@ -128,25 +124,10 @@ func nextTokenStartIndex(buf []byte, searchByte byte) int {
 		return -1
 	}
 
-	openTagIdx := 1
-
-	for {
-		_ = buf[openTagIdx] // Remove bounds check for next call
-		idx := bytes.IndexByte(buf[openTagIdx:], searchByte)
-		if idx == -1 { // Not large enough buffer to get to next token beginning.
-			return -1
-		}
-
-		openTagIdx += idx
-
-		_ = buf[openTagIdx-1] // Remove bounds check for next call
-		// Simple check that tag start is not escaped
-		if buf[openTagIdx-1] != '\\' {
-			break
-		}
-
-		openTagIdx++ // Advance to next byte
+	idx := bytes.IndexByte(buf[1:], searchByte)
+	if idx == -1 {
+		return -1
 	}
 
-	return openTagIdx
+	return idx + 1
 }
