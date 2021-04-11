@@ -98,29 +98,16 @@ func (p *Parser) Next() (xml.Token, error) {
 //
 // Returned token cannot be copied or modified.
 // It is valid to copy data from the token.
-func (p *Parser) decodeToken(buf []byte) (xml.Token, error) {
+func (p *Parser) decodeToken(buf []byte) (xml.Token, error) { //nolint:gocyclo,cyclop // Performance matters
 	if len(buf) == 0 {
 		return nil, io.ErrUnexpectedEOF
 	}
 
-	tokenDecoder, err := p.findDecoder(buf)
-	if err != nil {
-		return nil, err
-	}
+	var decoderFunc TokenDecoderFunc
 
-	token, err := tokenDecoder(buf)
-	if err != nil {
-		return nil, err
-	}
-
-	return token, nil
-}
-
-//nolint:gocyclo // No way to go around it..
-func (p *Parser) findDecoder(buf []byte) (TokenDecoderFunc, error) {
 	switch {
 	case len(buf) >= 3 && buf[0] == '<' && buf[1] == '/':
-		return p.decodeClosingTag, nil
+		decoderFunc = p.decodeClosingTag
 	case len(buf) >= 7 && buf[0] == '<' && buf[1] == '!' && buf[2] == '-' && buf[3] == '-':
 		return nil, errors.New("unknown implementation for comment")
 	case len(buf) >= 11 && buf[0] == '<' && buf[1] == '!' && buf[2] == '[':
@@ -128,13 +115,20 @@ func (p *Parser) findDecoder(buf []byte) (TokenDecoderFunc, error) {
 	case len(buf) >= 3 && buf[0] == '<' && buf[1] == '?' && isNameStartChar(rune(buf[3])):
 		return nil, errors.New("unknown implementation for processing instruction")
 	case buf[0] == '<': // This will be our "catch-all" decoder.
-		return p.decodeSimpleTag, nil
+		decoderFunc = p.decodeSimpleTag
 	case isValidChar(rune(buf[0])):
-		return p.decodeString, nil
+		decoderFunc = p.decodeString
 	default:
 		// We don't know how to handle this case, so return an error.
 		return nil, fmt.Errorf("next byte is not valid: %q", buf[0])
 	}
+
+	token, err := decoderFunc(buf)
+	if err != nil {
+		return nil, err
+	}
+
+	return token, nil
 }
 
 func (p *Parser) sendSelfClosingEnd() xml.Token {
