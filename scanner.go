@@ -38,42 +38,6 @@ func FetchNextToken(buf []byte) (data []byte, err error) {
 	return buf[:tagEnd], nil
 }
 
-// ScanTag is a SplitFunc that is intended to be used with bufio.Scanner.
-func (p *Parser) ScanTag(data []byte, atEOF bool) (advance int, token []byte, err error) {
-	// Fmt.Println(len(data), atEOF).
-	if atEOF && len(data) == 0 {
-		return 0, nil, io.EOF
-	}
-
-	if nextTokenStartIndex(data, '<') == -1 && !atEOF {
-		return 0, nil, nil
-	}
-
-	// tagEnd specifies index of end of the tag.
-	// Value of 0 tells that not enough data was fed to fetch full tag.
-	var tagEnd int
-
-	nextByte := data[0]
-	switch {
-	case nextByte == '<': // All XML tags start with '<'.
-		tagEnd, err = scanFullTag(data)
-	default: // Treat as text.
-		tagEnd, err = scanFullCharData(data)
-	}
-
-	if err != nil {
-		return 0, nil, err
-	}
-
-	if tagEnd == 0 {
-		return 0, nil, nil
-	}
-
-	p.nextOffset = tagEnd
-
-	return tagEnd, data[:tagEnd], nil
-}
-
 // scanFullTag.
 func scanFullTag(buf []byte) (int, error) {
 	// Not implemented yet.

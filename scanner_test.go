@@ -1,41 +1,16 @@
 package fastxml
 
 import (
-	"bufio"
 	"bytes"
 	"encoding/xml"
 	"errors"
-	"fmt"
 	"io"
 	"os"
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
-
-func TestParser_ScanTag(t *testing.T) {
-	data := `<table ID="lineitem">
-<T><L_ORDERKEY>1</L_ORDERKEY><L_PARTKEY>1552</L_PARTKEY>q</T></table>
- `
-
-	sc := bufio.NewScanner(strings.NewReader(data))
-	sc.Split((&Parser{}).ScanTag)
-
-	for sc.Scan() {
-		fmt.Printf("%q\n", sc.Text())
-	}
-
-	// Output:
-	// "<a>"
-	// "a"
-	// "</a>"
-	// "\n"
-	// "<dd a='b'>"
-	// "  aa a <\n"
-	// "</dd>".
-}
 
 func TestScanFullCharData(t *testing.T) {
 	tests := []struct {
