@@ -1,7 +1,9 @@
 package fastxml
 
 import (
+	"errors"
 	"fmt"
+	"io"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -70,7 +72,7 @@ func TestNextNonSpaceIndex(t *testing.T) {
 }
 
 func TestParser_Next(t *testing.T) {
-	data := `<ab> some data in between</ab><a><br/>
+	data := `<ab> some data in between</ab><!---comment- --><a><br/>
 <br /> end value 
 `
 
@@ -78,6 +80,7 @@ func TestParser_Next(t *testing.T) {
 		`*xml.StartElement: &{{"" "ab"} []}`,
 		`*xml.CharData: &" some data in between"`,
 		`*xml.EndElement: &{{"" "ab"}}`,
+		`*xml.Comment: &"-comment- "`,
 		`*xml.StartElement: &{{"" "a"} []}`,
 		`*xml.StartElement: &{{"" "br"} []}`,
 		`*xml.EndElement: &{{"" "br"}}`,
@@ -94,6 +97,10 @@ func TestParser_Next(t *testing.T) {
 	for {
 		token, err := p.Next()
 		if err != nil {
+			if !errors.Is(err, io.EOF) {
+				t.Log(err.Error())
+			}
+
 			break
 		}
 

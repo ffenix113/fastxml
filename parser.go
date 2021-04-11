@@ -1,6 +1,7 @@
 package fastxml
 
 import (
+	"bytes"
 	"encoding/xml"
 	"errors"
 	"fmt"
@@ -91,7 +92,12 @@ func (p *Parser) Next() (xml.Token, error) {
 
 	p.nextOffset = uint32(len(tokenBytes))
 
-	return p.decodeToken(tokenBytes)
+	token, err := p.decodeToken(tokenBytes)
+	if err != nil {
+		return nil, fmt.Errorf("index position %d: %w", p.currentPointer, err)
+	}
+
+	return token, nil
 }
 
 // decodeToken receives a buffer for next token and tries to decode it.
@@ -109,7 +115,7 @@ func (p *Parser) decodeToken(buf []byte) (xml.Token, error) { //nolint:gocyclo,c
 	case len(buf) >= 3 && buf[0] == '<' && buf[1] == '/':
 		decoderFunc = p.decodeClosingTag
 	case len(buf) >= 7 && buf[0] == '<' && buf[1] == '!' && buf[2] == '-' && buf[3] == '-':
-		return nil, errors.New("unknown implementation for comment")
+		decoderFunc = p.decodeComment
 	case len(buf) >= 11 && buf[0] == '<' && buf[1] == '!' && buf[2] == '[':
 		return nil, errors.New("unknown implementation for CDATA")
 	case len(buf) >= 3 && buf[0] == '<' && buf[1] == '?' && isNameStartChar(rune(buf[3])):
@@ -123,12 +129,7 @@ func (p *Parser) decodeToken(buf []byte) (xml.Token, error) { //nolint:gocyclo,c
 		return nil, fmt.Errorf("next byte is not valid: %q", buf[0])
 	}
 
-	token, err := decoderFunc(buf)
-	if err != nil {
-		return nil, err
-	}
-
-	return token, nil
+	return decoderFunc(buf)
 }
 
 func (p *Parser) sendSelfClosingEnd() xml.Token {
@@ -146,6 +147,17 @@ func (p *Parser) decodeClosingTag(buf []byte) (xml.Token, error) {
 	p.innerData.endElement.Name.Local = unsafeByteToString(buf[2 : len(buf)-1])
 
 	return &p.innerData.endElement, nil
+}
+
+func (p *Parser) decodeComment(buf []byte) (xml.Token, error) {
+	commentEndIdx := bytes.Index(buf, []byte{'-', '-', '>'})
+	if commentEndIdx == -1 || buf[commentEndIdx-1] == '-' {
+		return nil, errors.New("comment is not properly formatted")
+	}
+
+	p.innerData.comment = buf[4:commentEndIdx]
+
+	return &p.innerData.comment, nil
 }
 
 func (p *Parser) decodeString(buf []byte) (xml.Token, error) {
