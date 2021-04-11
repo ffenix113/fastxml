@@ -72,78 +72,78 @@ func TestNextTokenStartIndex(t *testing.T) {
 func BenchmarkScanTag(b *testing.B) {
 	buf := prepareFileBuf(b, "testdata/large.xml")
 
-	b.SetBytes(int64(len(buf)))
-	b.ReportAllocs()
-
 	var lines int
 
-	b.ResetTimer()
+	b.Run("fastxml", func(b *testing.B) {
+		b.ResetTimer()
+		b.SetBytes(int64(len(buf)))
+		b.ReportAllocs()
 
-	for i := 0; i < b.N; i++ {
-		lines = 0
+		for i := 0; i < b.N; i++ {
+			lines = 0
 
-		p := NewParser(buf, false)
+			p := NewParser(buf, false)
 
-		for {
-			_, err := p.Next()
-			if err != nil {
-				if errors.Is(err, io.EOF) {
-					break
+			for {
+				_, err := p.Next()
+				if err != nil {
+					if errors.Is(err, io.EOF) {
+						break
+					}
+
+					b.Fatal(err.Error())
 				}
 
-				b.Fatal(err.Error())
+				lines++
 			}
-			// B.Log(s.Text()).
-			lines++
 		}
-	}
 
-	assert.Equal(b, 3068929, lines)
-}
+		assert.Equal(b, 3068929, lines)
+	})
 
-func BenchmarkSTDXML(b *testing.B) {
-	buf := prepareFileBuf(b, "testdata/large.xml")
-	reader := bytes.NewReader(buf)
+	b.Run("encoding/xml", func(b *testing.B) {
+		b.ResetTimer()
+		b.SetBytes(int64(len(buf)))
+		b.ReportAllocs()
 
-	b.SetBytes(int64(len(buf)))
-	b.ReportAllocs()
+		reader := bytes.NewReader(buf)
 
-	var lines int
+		for i := 0; i < b.N; i++ {
+			lines = 0
 
-	b.ResetTimer()
+			reader.Seek(0, io.SeekStart)
 
-	for i := 0; i < b.N; i++ {
-		lines = 0
+			dec := xml.NewDecoder(reader)
+			dec.CharsetReader = func(charset string, input io.Reader) (io.Reader, error) {
+				return input, nil
+			}
 
-		reader.Seek(0, io.SeekStart)
+			for {
+				_, err := dec.Token()
+				if err != nil {
+					if errors.Is(err, io.EOF) {
+						break
+					}
 
-		dec := xml.NewDecoder(reader)
-
-		for {
-			_, err := dec.Token()
-			if err != nil {
-				if errors.Is(err, io.EOF) {
-					break
+					b.Fatal(err.Error())
 				}
 
-				b.Fatal(err.Error())
+				lines++
 			}
-
-			lines++
 		}
-	}
 
-	assert.Equal(b, 3068929, lines)
+		assert.Equal(b, 3068929, lines)
+	})
 }
 
-func prepareFileBuf(tb testing.TB, filePath string) []byte {
-	tb.Helper()
+func prepareFileBuf(b *testing.B, filePath string) []byte {
+	b.Helper()
 
 	file, err := os.Open(filePath)
-	require.NoError(tb, err)
+	require.NoError(b, err)
 
 	size, err := file.Seek(0, io.SeekEnd)
-	require.NoError(tb, err)
+	require.NoError(b, err)
 	file.Seek(0, io.SeekStart)
 
 	buf := make([]byte, size)
