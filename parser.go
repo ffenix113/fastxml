@@ -59,9 +59,6 @@ func NewParser(buf []byte, mustCopy bool) *Parser {
 		buf = newBuf
 	}
 
-	if len(buf) != cap(buf) {
-		buf = buf[:len(buf):len(buf)]
-	}
 	p := Parser{
 		buf: buf,
 	}
