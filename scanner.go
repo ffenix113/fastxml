@@ -19,6 +19,7 @@ func FetchNextToken(buf []byte) (data []byte, err error) {
 	var tagEnd int
 
 	nextByte := buf[0]
+
 	switch {
 	case nextByte == '<': // All XML tags start with '<'.
 		tagEnd, err = scanFullTag(buf)
@@ -38,8 +39,7 @@ func FetchNextToken(buf []byte) (data []byte, err error) {
 }
 
 // scanFullTag.
-func scanFullTag(buf []byte) (int, error) {
-	// Not implemented yet.
+func scanFullTag(buf []byte) (int, error) { //nolint:unparam // Error is required to match signature.
 	return nextTokenStartIndex(buf, '>') + 1, nil
 }
 
@@ -88,28 +88,11 @@ func scanTillWordEnd(buf []byte) int {
 	return 1
 }
 
-// scanTillCharDataEnd returns index of last byte of char data.
-func scanTillCharDataEnd(buf []byte) int {
-	if len(buf) == 0 {
-		return 0
-	}
-
-	var endIdx int
-	for {
-		rn, size := utf8.DecodeRune(buf[endIdx:])
-		if !isValidChar(rn) {
-			return endIdx
-		}
-
-		endIdx += size
-	}
-}
-
 // nextTokenStartIndex checks that in current buffer there is always visible start of next tag.
 //
 // Function will check range buf[1:] to skip first byte, which can(and will be) be a tag start token.
 //
-// searchByte must be '<' or '>' or other escapable XML character.
+// Value of searchByte must be '<' or '>' or other escapable XML character.
 func nextTokenStartIndex(buf []byte, searchByte byte) int {
 	if len(buf) < 1 {
 		return -1

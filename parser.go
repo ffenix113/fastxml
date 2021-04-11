@@ -2,6 +2,7 @@ package fastxml
 
 import (
 	"encoding/xml"
+	"errors"
 	"fmt"
 	"io"
 	"unicode"
@@ -30,11 +31,6 @@ type TokenDecoderFunc func([]byte) (xml.Token, error)
 type Parser struct {
 	// buf holds full data to parse.
 	buf []byte
-	// currentPointer ALWAYS points to next byte that needs to be processed.
-	currentPointer int
-	// nextOffset specifies how many bytes were read on last token decoding.
-	// This value MUST be added to `currentPointer` before next call to Next.
-	nextOffset int
 	// lastTagName is the last found open tag name.
 	// This is necessary for self closing tags. For them there will be two events:
 	// startElement and then endElement with the same name.
@@ -49,6 +45,11 @@ type Parser struct {
 		endElement   xml.EndElement   // </some_tag>
 		procInst     xml.ProcInst     // <?xmxl encoding="UTF-8" ?>
 	}
+	// currentPointer ALWAYS points to next byte that needs to be processed.
+	currentPointer uint32
+	// nextOffset specifies how many bytes were read on last token decoding.
+	// This value MUST be added to `currentPointer` before next call to Next.
+	nextOffset uint32
 }
 
 // NewParser will create a parser from input bytes.
@@ -57,7 +58,7 @@ type Parser struct {
 // set `mustCopy` to true and parser will copy full buffer to new slice and will use that.
 func NewParser(buf []byte, mustCopy bool) *Parser {
 	if mustCopy {
-		newBuf := make([]byte, len(buf), len(buf))
+		newBuf := make([]byte, len(buf))
 		copy(newBuf, buf)
 
 		buf = newBuf
@@ -79,7 +80,7 @@ func (p *Parser) Next() (xml.Token, error) {
 	}
 
 	p.currentPointer += p.nextOffset
-	if p.currentPointer >= len(p.buf) {
+	if p.currentPointer >= uint32(len(p.buf)) {
 		return nil, io.EOF
 	}
 
@@ -88,48 +89,52 @@ func (p *Parser) Next() (xml.Token, error) {
 		return nil, err
 	}
 
-	p.nextOffset = len(tokenBytes)
-
-	//if !p.scanner.Scan() {
-	//	return nil, io.EOF // p.scanner.Err()
-	//}
+	p.nextOffset = uint32(len(tokenBytes))
 
 	return p.decodeToken(tokenBytes)
 }
 
+// decodeToken receives a buffer for next token and tries to decode it.
+//
+// Returned token cannot be copied or modified.
+// It is valid to copy data from the token.
 func (p *Parser) decodeToken(buf []byte) (xml.Token, error) {
 	if len(buf) == 0 {
 		return nil, io.ErrUnexpectedEOF
 	}
 
-	var decodeFunc TokenDecoderFunc
-	switch {
-	case len(buf) >= 3 && buf[0] == '<' && buf[1] == '/':
-		decodeFunc = p.decodeClosingTag
-	case len(buf) >= 7 && buf[0] == '<' && buf[1] == '!' && buf[2] == '-' && buf[3] == '-':
-		// decodeFunc = p.decodeComment
-		panic("unknown implementation for comment")
-	case len(buf) >= 11 && buf[0] == '<' && buf[1] == '!' && buf[2] == '[':
-		// This is CDATA
-		panic("unknown implementation for CDATA")
-	case len(buf) >= 3 && buf[0] == '<' && buf[1] == '?' && isNameStartChar(rune(buf[3])):
-		// decodeFunc = p.decodeProlog // Let's not support this for now.
-		panic("unknown implementation!")
-	case buf[0] == '<': // This will be our "catch-all" decoder.
-		decodeFunc = p.decodeSimpleTag
-	case isValidChar(rune(buf[0])):
-		decodeFunc = p.decodeString
-	default:
-		// We don't know how to handle this case, so return an error.
-		return nil, fmt.Errorf("next byte is not valid: %q", buf[0])
+	tokenDecoder, err := p.findDecoder(buf)
+	if err != nil {
+		return nil, err
 	}
 
-	token, err := decodeFunc(buf)
+	token, err := tokenDecoder(buf)
 	if err != nil {
 		return nil, err
 	}
 
 	return token, nil
+}
+
+//nolint:gocyclo // No way to go around it..
+func (p *Parser) findDecoder(buf []byte) (TokenDecoderFunc, error) {
+	switch {
+	case len(buf) >= 3 && buf[0] == '<' && buf[1] == '/':
+		return p.decodeClosingTag, nil
+	case len(buf) >= 7 && buf[0] == '<' && buf[1] == '!' && buf[2] == '-' && buf[3] == '-':
+		return nil, errors.New("unknown implementation for comment")
+	case len(buf) >= 11 && buf[0] == '<' && buf[1] == '!' && buf[2] == '[':
+		return nil, errors.New("unknown implementation for CDATA")
+	case len(buf) >= 3 && buf[0] == '<' && buf[1] == '?' && isNameStartChar(rune(buf[3])):
+		return nil, errors.New("unknown implementation for processing instruction")
+	case buf[0] == '<': // This will be our "catch-all" decoder.
+		return p.decodeSimpleTag, nil
+	case isValidChar(rune(buf[0])):
+		return p.decodeString, nil
+	default:
+		// We don't know how to handle this case, so return an error.
+		return nil, fmt.Errorf("next byte is not valid: %q", buf[0])
+	}
 }
 
 func (p *Parser) sendSelfClosingEnd() xml.Token {
@@ -175,10 +180,9 @@ func (p *Parser) decodeSimpleTag(buf []byte) (xml.Token, error) {
 // CopyString will return copy of the input string.
 //
 // Call this function if you would like to get a copy of a string provided in a Token.
-// Otherwise string that would be taken by caller without passing it through this function
-// might be changed after last token will be retrieved by Parser.
 //
-// This is required because in some cases data might be wrapped by `bufio.Scanner`.
+// Strings in the returned tokens are only pointers to input buffer.
+// As such if data changes in input buffer - values of strings will also change.
 func CopyString(s string) string {
 	return string([]byte(s))
 }
@@ -189,7 +193,7 @@ func CopyString(s string) string {
 // This function must be called when `buf` has word in start.
 //
 // On error `start` will hold starting index of the rune that is invalid, `end` will be always 0.
-func NextWordIndex(buf []byte) (start int, end int, err error) {
+func NextWordIndex(buf []byte) (start, end int, err error) {
 	start = NextNonSpaceIndex(buf)
 	currPtr := start
 
@@ -232,13 +236,13 @@ func NextNonSpaceIndex(buf []byte) (idx int) {
 
 func isNameStartChar(rn rune) bool {
 	return rn == ':' || rn == '_' ||
-		('a' <= rn && rn <= 'z') ||
-		('A' <= rn && rn <= 'Z')
+		(rn >= 'a' && rn <= 'z') ||
+		(rn >= 'A' && rn <= 'Z')
 }
 
 func isNameChar(rn rune) bool {
 	return isNameStartChar(rn) || rn == '-' || rn == '.' ||
-		('0' <= rn && rn <= '9')
+		(rn >= '0' && rn <= '9')
 }
 
 func isValidChar(rn rune) bool {
@@ -251,5 +255,5 @@ func isValidChar(rn rune) bool {
 }
 
 func unsafeByteToString(b []byte) string {
-	return *(*string)(unsafe.Pointer(&b))
+	return *(*string)(unsafe.Pointer(&b)) // nolint:gosec // This is valid and simple conversion.
 }
