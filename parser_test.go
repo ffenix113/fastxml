@@ -1,10 +1,8 @@
 package fastxml
 
 import (
-	"encoding/xml"
-	"reflect"
+	"fmt"
 	"testing"
-	"unsafe"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -73,12 +71,25 @@ func TestNextNonSpaceIndex(t *testing.T) {
 
 func TestParser_Next(t *testing.T) {
 	data := `<ab> some data in between</ab><a><br/>
-<br/> end value 
+<br /> end value 
 `
+
+	mustResult := []string{
+		`*xml.StartElement: &{{"" "ab"} []}`,
+		`*xml.CharData: &" some data in between"`,
+		`*xml.EndElement: &{{"" "ab"}}`,
+		`*xml.StartElement: &{{"" "a"} []}`,
+		`*xml.StartElement: &{{"" "br"} []}`,
+		`*xml.EndElement: &{{"" "br"}}`,
+		`*xml.CharData: &"\n"`,
+		`*xml.StartElement: &{{"" "br"} []}`,
+		`*xml.EndElement: &{{"" "br"}}`,
+		`*xml.CharData: &" end value \n"`,
+	}
 
 	p := NewParser([]byte(data), false)
 
-	var open []string
+	var results []string
 
 	for {
 		token, err := p.Next()
@@ -86,18 +97,8 @@ func TestParser_Next(t *testing.T) {
 			break
 		}
 
-		if openToken, ok := token.(*xml.StartElement); ok {
-			open = append(open, openToken.Name.Local)
-			//t.Logf("added: %p: %#v", &openToken.Name.Local, *(*reflect.StringHeader)(unsafe.Pointer(&openToken.Name.Local)))
-		}
-
-		t.Logf("%q (%#v)", token, token)
+		results = append(results, fmt.Sprintf("%T: %q", token, token))
 	}
 
-	t.Log("---")
-
-	for i := range open {
-		t.Logf("after: %p: %#v", &open[i], *(*reflect.StringHeader)(unsafe.Pointer(&open[i])))
-	}
-	assert.Equal(t, []string{"ab", "a"}, open)
+	assert.Equal(t, mustResult, results)
 }

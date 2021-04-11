@@ -35,7 +35,11 @@ type Parser struct {
 	// nextOffset specifies how many bytes were read on last token decoding.
 	// This value MUST be added to `currentPointer` before next call to Next.
 	nextOffset int
-	//
+	// lastTagName is the last found open tag name.
+	// This is necessary for self closing tags. For them there will be two events:
+	// startElement and then endElement with the same name.
+	lastTagName string
+	// innerData holds all available types that will be returned to the caller.
 	innerData struct {
 		attr         xml.Attr         // <tag name="val" another='val'>
 		charData     xml.CharData     // "text between tags"
@@ -70,6 +74,10 @@ func NewParser(buf []byte, mustCopy bool) *Parser {
 //
 // Caller MUST NOT hold onto returned tokens. Instead it may store data from them, but don't hold onto pointers.
 func (p *Parser) Next() (xml.Token, error) {
+	if p.lastTagName != "" {
+		return p.sendSelfClosingEnd(), nil
+	}
+
 	p.currentPointer += p.nextOffset
 	if p.currentPointer >= len(p.buf) {
 		return nil, io.EOF
@@ -124,9 +132,14 @@ func (p *Parser) decodeToken(buf []byte) (xml.Token, error) {
 	return token, nil
 }
 
-// decodeTag is anything.
-func (p *Parser) decodeTag(buf []byte) (xml.Token, error) {
-	return nil, nil
+func (p *Parser) sendSelfClosingEnd() xml.Token {
+	const emptyString = ""
+
+	p.innerData.endElement.Name.Local = p.lastTagName
+
+	p.lastTagName = emptyString
+
+	return &p.innerData.endElement
 }
 
 // decodeClosingTag is anything.
@@ -145,17 +158,18 @@ func (p *Parser) decodeString(buf []byte) (xml.Token, error) {
 func (p *Parser) decodeSimpleTag(buf []byte) (xml.Token, error) {
 	tagNameIdx := scanTillWordEnd(buf[1:])
 
-	if buf[tagNameIdx+1] == '>' {
-		p.innerData.startElement.Name.Local = unsafeByteToString(p.buf[p.currentPointer+1 : p.currentPointer+tagNameIdx+1])
-		//			buf[1 : tagNameIdx+1])
+	tagName := unsafeByteToString(buf[1 : tagNameIdx+1])
 
-		return &p.innerData.startElement, nil
+	if buf[len(buf)-2] == '/' {
+		p.lastTagName = tagName
 	}
+
+	p.innerData.startElement.Name.Local = tagName
 
 	// Currently we are not supporting attributes.
 	// Plan is to have some sort of a function that will parse attributes on demand.
 
-	return nil, nil
+	return &p.innerData.startElement, nil
 }
 
 // CopyString will return copy of the input string.
