@@ -2,8 +2,7 @@ package fastxml
 
 import (
 	"bytes"
-	"fmt"
-	"io"
+	"errors"
 	"unicode/utf8"
 )
 
@@ -45,31 +44,28 @@ func scanFullTag(buf []byte) (int, error) {
 }
 
 // scanFulLCharData will return end index of char data.
-//
-// It is guaranteed that this function will always receive.
 func scanFullCharData(buf []byte) (int, error) {
 	if len(buf) == 0 {
 		return 0, nil
 	}
 
-	var endIdx int
-	for {
-		rn, size := utf8.DecodeRune(buf[endIdx:])
-		if rn == utf8.RuneError {
-			switch size {
-			case 0:
-				return endIdx, nil
-			case 1:
-				return endIdx, fmt.Errorf("invalid rune on index %d", endIdx)
-			}
-		}
-
-		if !isValidChar(rn) || rn == '<' {
-			return endIdx, nil
-		}
-
-		endIdx += size
+	// We "don't need" to decode every single rune because we will pass this buffer directly as a string.
+	// Also as we don't validate XML - no need to be strict about it.
+	openIdx := bytes.IndexByte(buf, '<')
+	if openIdx == -1 {
+		// If no opening char is found - seems that we found the end of the stream.
+		// FIXME: Check out which characters are allowed to be added at the end of the file.
+		// Some validators say that new line is okay.
+		//
+		// For now we will assume that all of them are okay(even invalid ones).
+		return len(buf), nil
 	}
+
+	if !utf8.Valid(buf[:openIdx]) {
+		return len(buf), errors.New("invalid utf-8 byte sequence is passed as char data")
+	}
+
+	return openIdx, nil
 }
 
 // scanTillWordEnd will return index on which valid XML token name will end.
