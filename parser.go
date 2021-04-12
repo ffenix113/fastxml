@@ -117,7 +117,7 @@ func (p *Parser) decodeToken(buf []byte) (xml.Token, error) { //nolint:gocyclo,c
 	case len(buf) >= 7 && buf[0] == '<' && buf[1] == '!' && buf[2] == '-' && buf[3] == '-':
 		decoderFunc = p.decodeComment
 	case len(buf) >= 11 && buf[0] == '<' && buf[1] == '!' && buf[2] == '[':
-		return nil, errors.New("unknown implementation for CDATA")
+		decoderFunc = p.decodeCdata
 	case len(buf) >= 3 && buf[0] == '<' && buf[1] == '?' && isNameStartChar(rune(buf[3])):
 		return nil, errors.New("unknown implementation for processing instruction")
 	case buf[0] == '<': // This will be our "catch-all" decoder.
@@ -158,6 +158,12 @@ func (p *Parser) decodeComment(buf []byte) (xml.Token, error) {
 	p.innerData.comment = buf[4:commentEndIdx]
 
 	return &p.innerData.comment, nil
+}
+
+func (p *Parser) decodeCdata(buf []byte) (xml.Token, error) {
+	p.innerData.charData = buf[CdataPrefLen : len(buf)-CdataSufLen]
+
+	return &p.innerData.charData, nil
 }
 
 func (p *Parser) decodeString(buf []byte) (xml.Token, error) {

@@ -72,7 +72,7 @@ func TestNextNonSpaceIndex(t *testing.T) {
 }
 
 func TestParser_Next(t *testing.T) {
-	data := `<ab> some data in between</ab><!---comment- --><a><br/>
+	data := `<ab> some data in between</ab><![CDATA[<tag>  ]]><!---comment- --><a><br/>
 <br /> end value 
 `
 
@@ -80,6 +80,7 @@ func TestParser_Next(t *testing.T) {
 		`*xml.StartElement: &{{"" "ab"} []}`,
 		`*xml.CharData: &" some data in between"`,
 		`*xml.EndElement: &{{"" "ab"}}`,
+		`*xml.CharData: &"<tag>  "`,
 		`*xml.Comment: &"-comment- "`,
 		`*xml.StartElement: &{{"" "a"} []}`,
 		`*xml.StartElement: &{{"" "br"} []}`,
