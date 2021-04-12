@@ -6,13 +6,17 @@ import (
 	"unicode/utf8"
 )
 
-const CdataPref = "<![CDATA["
-const CdataPrefLen = len(CdataPref)
-const CdataSuf = "]]>"
-const CdataSufLen = len(CdataSuf)
+var (
+	cdataPrefByte = []byte(cdataPref)
+	cdataSufByte  = []byte(cdataSuf)
+)
 
-var CdataPrefByte = []byte(CdataPref)
-var CdataSufByte = []byte(CdataSuf)
+const (
+	cdataPref    = "<![CDATA["
+	cdataPrefLen = len(cdataPref)
+	cdataSuf     = "]]>"
+	cdataSufLen  = len(cdataSuf)
+)
 
 // FetchNextToken will return next tag bytes.
 //
@@ -52,13 +56,13 @@ func FetchNextToken(buf []byte) (data []byte, err error) {
 func scanFullTag(buf []byte) (int, error) { //nolint:unparam // Error is required to match signature.
 	// CDATA needs special treatment as it may contain '>' and '<', and other characters which
 	// is forbidden in other tags.
-	if bytes.HasPrefix(buf, CdataPrefByte) {
-		endIdx := bytes.Index(buf, CdataSufByte)
+	if bytes.HasPrefix(buf, cdataPrefByte) {
+		endIdx := bytes.Index(buf, cdataSufByte)
 		if endIdx == -1 {
 			return 0, errors.New("no CDATA suffix found")
 		}
 
-		return endIdx + CdataSufLen, nil
+		return endIdx + cdataSufLen, nil
 	}
 
 	return nextTokenStartIndex(buf, '>') + 1, nil

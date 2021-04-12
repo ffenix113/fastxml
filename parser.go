@@ -161,7 +161,7 @@ func (p *Parser) decodeComment(buf []byte) (xml.Token, error) {
 }
 
 func (p *Parser) decodeCdata(buf []byte) (xml.Token, error) {
-	p.innerData.charData = buf[CdataPrefLen : len(buf)-CdataSufLen]
+	p.innerData.charData = buf[cdataPrefLen : len(buf)-cdataSufLen]
 
 	return &p.innerData.charData, nil
 }

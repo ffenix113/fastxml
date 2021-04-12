@@ -409,6 +409,7 @@ linters:
     - paralleltest
     - testpackage
     - goerr113 # disabled for now, will be enabled when parser will be more mature.
+    - gochecknoglobals
   presets:
     - bugs
     - unused
