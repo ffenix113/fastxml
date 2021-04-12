@@ -38,13 +38,14 @@ type Parser struct {
 	lastTagName string
 	// innerData holds all available types that will be returned to the caller.
 	innerData struct {
-		attr         xml.Attr         // <tag name="val" another='val'>
-		charData     xml.CharData     // "text between tags"
-		comment      xml.Comment      // <!-- comment -->
-		directive    xml.Directive    // <!directive>
-		startElement xml.StartElement // <some_tag>
-		endElement   xml.EndElement   // </some_tag>
-		procInst     xml.ProcInst     // <?xmxl encoding="UTF-8" ?>
+		attr         xml.Attr      // <tag name="val" another='val'>
+		charData     xml.CharData  // "text between tags"
+		comment      xml.Comment   // <!-- comment -->
+		directive    xml.Directive // <!directive>
+		startElement StartElement  // <some_tag>
+		//startElement xml.StartElement // <some_tag>
+		endElement xml.EndElement // </some_tag>
+		procInst   xml.ProcInst   // <?xmxl encoding="UTF-8" ?>
 	}
 	// currentPointer ALWAYS points to next byte that needs to be processed.
 	currentPointer uint32
@@ -181,12 +182,45 @@ func (p *Parser) decodeSimpleTag(buf []byte) (xml.Token, error) {
 		p.lastTagName = tagName
 	}
 
-	p.innerData.startElement.Name.Local = tagName
+	p.innerData.startElement.Name = tagName
+	p.innerData.startElement.attrBuf = buf[tagNameIdx+1:]
 
 	// Currently we are not supporting attributes.
 	// Plan is to have some sort of a function that will parse attributes on demand.
 
 	return &p.innerData.startElement, nil
+}
+
+func decodeTagAttribute(buf []byte) (string, string, int, error) {
+	if len(buf) == 0 || buf[0] == '>' {
+		return "", "", -1, nil
+	}
+
+	if bytes.IndexByte(buf, '=') == -1 {
+		return "", "", 0, errors.New("no equal sign in attributes")
+	}
+
+	nonSpaceIdx := NextNonSpaceIndex(buf)
+	if buf[nonSpaceIdx] == '>' {
+		return "", "", -1, nil
+	}
+
+	// Fetch attribute name and position where it ends.
+	attrName, endAttrNameIdx, err := NextWord(buf)
+	if err != nil {
+		return "", "", 0, err
+	}
+
+	// Now we need to find equal sign and pass over it.
+	equalIdx := nextTokenStartIndex(buf[endAttrNameIdx-1:], '=')
+
+	attrValue, endAttrValueIdx, err := NextQuotedWord(buf[endAttrNameIdx+equalIdx:])
+	if err != nil {
+		return "", "", 0, err
+	}
+
+	// 1 is added to skip index to go over the last quotation mark.
+	return attrName, attrValue, endAttrNameIdx + endAttrValueIdx + equalIdx + 1, nil
 }
 
 // CopyString will return copy of the input string.
@@ -199,10 +233,32 @@ func CopyString(s string) string {
 	return string([]byte(s))
 }
 
+// NextWord will return next word that possibly was located after some spaces.
+func NextWord(buf []byte) (word string, endIdx int, err error) {
+	var startIdx int
+
+	startIdx, endIdx, err = NextWordIndex(buf)
+	if err != nil {
+		return "", 0, err
+	}
+
+	return unsafeByteToString(buf[startIdx:endIdx]), endIdx, nil
+}
+
+// NextQuotedWord will return next quoted word that possibly was located after some spaces.
+func NextQuotedWord(buf []byte) (word string, endIdx int, err error) {
+	var startIdx int
+
+	startIdx, endIdx, err = NextQuotedWordIndex(buf)
+	if err != nil {
+		return "", 0, err
+	}
+
+	return unsafeByteToString(buf[startIdx+1 : endIdx]), endIdx, nil
+}
+
 // NextWordIndex returns two offsets: for start and the end of the word.
 // Word is a sequence of alphabetic characters separated by underscore.
-//
-// This function must be called when `buf` has word in start.
 //
 // On error `start` will hold starting index of the rune that is invalid, `end` will be always 0.
 func NextWordIndex(buf []byte) (start, end int, err error) {
@@ -224,7 +280,7 @@ func NextWordIndex(buf []byte) (start, end int, err error) {
 		rn, size = utf8.DecodeRune(buf[currPtr:])
 
 		// Check if name is finished
-		if rn == ' ' {
+		if unicode.IsSpace(rn) || rn == '=' {
 			return start, currPtr, nil
 		}
 
@@ -232,6 +288,33 @@ func NextWordIndex(buf []byte) (start, end int, err error) {
 			return currPtr, 0, fmt.Errorf("rune is not valid name part: %c", rn)
 		}
 	}
+}
+
+// NextQuotedWordIndex returns two offsets: for start and the end of the quotes.
+// This means that caller MUST do something like `buf[start+1:start+1+end-1]` to get actual word.
+//
+// Word is a sequence of alphabetic characters separated by underscore.
+//
+// On error `start` will hold starting index of the rune that is invalid, `end` will be always 0.
+//
+// Returned indexes will not include quotation mark itself.
+//
+// Note: current implementation differs from NextWordIndex in a way that
+// this function does not validate runes inside of found word.
+func NextQuotedWordIndex(buf []byte) (start, end int, err error) {
+	start = NextNonSpaceIndex(buf)
+
+	quote := buf[start]
+	if quote != '\'' && quote != '"' {
+		return 0, 0, errors.New("no quotation mark on the beginning of the word")
+	}
+
+	end = bytes.IndexByte(buf[start+1:], quote)
+	if end == -1 {
+		return 0, 0, errors.New("word is not properly quoted")
+	}
+
+	return start, end + 1, nil
 }
 
 // NextNonSpaceIndex will return index on which next rune will be non-space.

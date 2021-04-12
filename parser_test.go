@@ -6,6 +6,8 @@ import (
 	"io"
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/stretchr/testify/assert"
 )
 
@@ -71,22 +73,68 @@ func TestNextNonSpaceIndex(t *testing.T) {
 	}
 }
 
+func TestDecodeTagAttribute(t *testing.T) {
+	tests := []struct {
+		name              string
+		input             string
+		attrName, attrVal string
+		skipIdx           int
+		err               string
+	}{
+		{"", "tag='val'", "tag", "val", 9, ""},
+	}
+
+	for _, test := range tests {
+		test := test
+
+		t.Run(test.name, func(t *testing.T) {
+			attrName, attrVal, skipIdx, err := decodeTagAttribute([]byte(test.input))
+
+			if test.err != "" {
+				require.EqualError(t, err, test.err)
+			} else {
+				require.NoError(t, err)
+			}
+
+			assert.Equal(t, test.attrName, attrName)
+			assert.Equal(t, test.attrVal, attrVal)
+			assert.Equal(t, test.skipIdx, skipIdx)
+		})
+	}
+}
+
+func TestStartElement_NextAttribute(t *testing.T) {
+	input := []byte(`<tag id='1' attr="222'2">`)
+	tag, err := (&Parser{}).decodeSimpleTag(input)
+
+	require.NoError(t, err)
+
+	startTag := tag.(*StartElement)
+
+	for {
+		attrName, attrVal, err := startTag.NextAttribute()
+		require.NoError(t, err)
+
+		t.Logf("%q => %q", attrName, attrVal)
+	}
+}
+
 func TestParser_Next(t *testing.T) {
 	data := `<ab> some data in between</ab><![CDATA[<tag>  ]]><!---comment- --><a><br/>
 <br /> end value 
 `
 
 	mustResult := []string{
-		`*xml.StartElement: &{{"" "ab"} []}`,
+		`*fastxml.StartElement: &{{"" "ab"} []}`,
 		`*xml.CharData: &" some data in between"`,
 		`*xml.EndElement: &{{"" "ab"}}`,
 		`*xml.CharData: &"<tag>  "`,
 		`*xml.Comment: &"-comment- "`,
-		`*xml.StartElement: &{{"" "a"} []}`,
-		`*xml.StartElement: &{{"" "br"} []}`,
+		`*fastxml.StartElement: &{{"" "a"} []}`,
+		`*fastxml.StartElement: &{{"" "br"} []}`,
 		`*xml.EndElement: &{{"" "br"}}`,
 		`*xml.CharData: &"\n"`,
-		`*xml.StartElement: &{{"" "br"} []}`,
+		`*fastxml.StartElement: &{{"" "br"} []}`,
 		`*xml.EndElement: &{{"" "br"}}`,
 		`*xml.CharData: &" end value \n"`,
 	}
