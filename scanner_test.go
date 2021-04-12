@@ -12,6 +12,41 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestFetchNextToken(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		token string
+		err   string
+	}{
+		{name: "", input: "<test> ", token: "<test>"},
+		{name: "", input: "</test> ", token: "</test>"},
+		{name: "", input: " this is char data <begin>", token: " this is char data "},
+		{name: "", input: "<!-- some data --> ", token: "<!-- some data -->"},
+		{name: "", input: "<!-- <some data --> ", token: "<!-- <some data -->"},
+		{name: "", input: "<![CDATA[data]]> ", token: "<![CDATA[data]]>"},
+		{name: "", input: "<![CDATA[]]> ", token: "<![CDATA[]]>"},
+		{name: "", input: "<![CDATA[<><><><><>]]> ", token: "<![CDATA[<><><><><>]]>"},
+		{name: "", input: "<![CDATA[<greeting>Hello, world!</greeting>]]> ", token: "<![CDATA[<greeting>Hello, world!</greeting>]]>"},
+	}
+
+	for _, test := range tests {
+		test := test
+
+		t.Run(test.name, func(t *testing.T) {
+			token, err := FetchNextToken([]byte(test.input))
+
+			if test.err == "" {
+				require.NoError(t, err)
+			} else {
+				require.EqualError(t, err, test.err)
+			}
+
+			assert.Equal(t, test.token, string(token))
+		})
+	}
+}
+
 func TestScanFullCharData(t *testing.T) {
 	tests := []struct {
 		name       string
