@@ -14,6 +14,9 @@ Also, by limiting number of (advanced) features provided by XML it is also great
 improving simplicity and performance of parsing.
 
 ### Q&A
+Q: Can it be used it in production?  
+A: I wouldn't recommend it just yet.
+
 Q: If it is using `unsafe` does this mean that it can break something?  
 A: No. It is using `unsafe` for only reason to point to specific memory for strings, nothing else.
 Also, as time goes by this project will grow its set of test cases.
