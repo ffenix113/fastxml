@@ -14,6 +14,7 @@ import (
 var _ = xml.Header
 
 var (
+	ErrNotAValidTag          = errors.New("not a valid tag")
 	ErrInvalidClosingElement = errors.New("invalid closing tag")
 )
 
@@ -114,24 +115,25 @@ func (p *Parser) decodeToken(buf []byte) (xml.Token, error) { //nolint:gocyclo,c
 		return nil, io.ErrUnexpectedEOF
 	}
 
+	if len(buf) < 3 && buf[0] == '<' {
+		return nil, ErrNotAValidTag
+	}
+
 	var decoderFunc TokenDecoderFunc
 
 	switch {
-	case len(buf) >= 3 && buf[0] == '<' && buf[1] == '/':
+	case buf[0] != '<':
+		decoderFunc = p.decodeString
+	case buf[0] == '<' && buf[1] == '/':
 		decoderFunc = p.decodeClosingTag
 	case len(buf) >= 7 && buf[0] == '<' && buf[1] == '!' && buf[2] == '-' && buf[3] == '-':
 		decoderFunc = p.decodeComment
 	case len(buf) >= 11 && buf[0] == '<' && buf[1] == '!' && buf[2] == '[':
 		decoderFunc = p.decodeCdata
-	case len(buf) >= 3 && buf[0] == '<' && buf[1] == '?' && isNameStartChar(rune(buf[3])):
+	case buf[0] == '<' && buf[1] == '?' && isNameStartChar(rune(buf[3])):
 		return nil, errors.New("unknown implementation for processing instruction")
-	case buf[0] == '<': // This will be our "catch-all" decoder.
+	default: // This will be our "catch-all" start tag decoder.
 		decoderFunc = p.decodeSimpleTag
-	case isValidChar(rune(buf[0])):
-		decoderFunc = p.decodeString
-	default:
-		// We don't know how to handle this case, so return an error.
-		return nil, fmt.Errorf("next byte is not valid: %q", buf[0])
 	}
 
 	return decoderFunc(buf)
