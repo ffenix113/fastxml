@@ -283,7 +283,7 @@ func NextWordIndex(buf []byte) (start, end int, err error) {
 
 	rn, size := utf8.DecodeRune(buf[currPtr:])
 	if !isNameStartChar(rn) {
-		return currPtr, 0, fmt.Errorf("rune is not valid start of name: %c", rn)
+		return currPtr, 0, fmt.Errorf("rune is not valid start of name: '%c'", rn)
 	}
 
 	for {
@@ -301,7 +301,7 @@ func NextWordIndex(buf []byte) (start, end int, err error) {
 		}
 
 		if !isNameChar(rn) {
-			return currPtr, 0, fmt.Errorf("rune is not valid name part: %c", rn)
+			return currPtr, 0, fmt.Errorf("rune is not valid name part: '%c'", rn)
 		}
 	}
 }
@@ -330,7 +330,7 @@ func NextQuotedWordIndex(buf []byte) (start, end int, err error) {
 		return 0, 0, errors.New("word is not properly quoted")
 	}
 
-	return start, end + 1, nil
+	return start, start + end + 1, nil
 }
 
 // NextNonSpaceIndex will return index on which next rune will be non-space.

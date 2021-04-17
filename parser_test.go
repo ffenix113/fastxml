@@ -82,7 +82,13 @@ func TestDecodeTagAttribute(t *testing.T) {
 		skipIdx           int
 		err               string
 	}{
-		{"", "tag='val'", "tag", "val", 9, ""},
+		{"simple", "tag='val'", "tag", "val", 9, ""},
+		{"simple another quote", `tag="val"`, "tag", "val", 9, ""},
+		{"simple empty value", `tag=""`, "tag", "", 6, ""},
+		{"simple no end quote", `tag="`, "", "", 0, "word is not properly quoted"},
+		{"simple with space", "tag = 'val'", "tag", "val", 11, ""},
+		{"attribute must have name", "='val'", "", "", 0, "rune is not valid start of name: '='"},
+		{"attribute must have name", " ='val'", "", "", 0, "rune is not valid start of name: '='"},
 	}
 
 	for _, test := range tests {
