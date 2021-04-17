@@ -13,6 +13,10 @@ import (
 
 var _ = xml.Header
 
+var (
+	ErrInvalidClosingElement = errors.New("invalid closing tag")
+)
+
 // This is just for reference of available types.
 var _ = []interface{}{
 	xml.Attr{},         // <tag name="val" another='val'>
@@ -143,9 +147,18 @@ func (p *Parser) sendSelfClosingEnd() xml.Token {
 	return &p.innerData.endElement
 }
 
-// decodeClosingTag is anything.
+// decodeClosingTag is used to decode closing tag.
 func (p *Parser) decodeClosingTag(buf []byte) (xml.Token, error) {
-	p.innerData.endElement.Name.Local = unsafeByteToString(buf[2 : len(buf)-1])
+	if len(buf) < 4 || buf[2] == '>' {
+		return nil, ErrInvalidClosingElement
+	}
+
+	nameEndIdx := scanTillWordEnd(buf[2:])
+	if nameEndIdx == 0 {
+		return nil, ErrInvalidClosingElement
+	}
+
+	p.innerData.endElement.Name.Local = unsafeByteToString(buf[2 : 2+nameEndIdx])
 
 	return &p.innerData.endElement, nil
 }

@@ -1,6 +1,7 @@
 package fastxml
 
 import (
+	"encoding/xml"
 	"errors"
 	"fmt"
 	"io"
@@ -157,4 +158,39 @@ func TestParser_Next(t *testing.T) {
 	}
 
 	assert.Equal(t, mustResult, results)
+}
+
+func TestDecodeClosingTag(t *testing.T) {
+	tests := []struct {
+		data   string
+		result string
+		err    string
+	}{
+		{"</simple>", "simple", ""},
+		{"</more_data>", "more_data", ""},
+		{"</spaces   	>", "spaces", ""},
+		{"</>", "", "invalid closing tag"},
+		{"</ 	>", "", "invalid closing tag"},
+	}
+
+	p := NewParser(nil, false)
+
+	for _, test := range tests {
+		test := test
+
+		t.Run(test.data, func(t *testing.T) {
+			token, err := p.decodeClosingTag([]byte(test.data))
+
+			if test.err != "" {
+				require.EqualError(t, err, test.err)
+				require.Nil(t, token)
+
+				return
+			} else {
+				require.NoError(t, err)
+			}
+
+			assert.Equal(t, test.result, token.(*xml.EndElement).Name.Local)
+		})
+	}
 }
