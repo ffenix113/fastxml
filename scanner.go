@@ -3,7 +3,6 @@ package fastxml
 import (
 	"bytes"
 	"errors"
-	"unicode/utf8"
 )
 
 var (
@@ -84,10 +83,6 @@ func scanFullCharData(buf []byte) (int, error) {
 		//
 		// For now we will assume that all of them are okay(even invalid ones).
 		return len(buf), nil
-	}
-
-	if !utf8.Valid(buf[:openIdx]) {
-		return len(buf), errors.New("invalid utf-8 byte sequence is passed as char data")
 	}
 
 	return openIdx, nil
