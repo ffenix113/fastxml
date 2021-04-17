@@ -103,10 +103,9 @@ func scanTillWordEnd(buf []byte) int {
 		return 0
 	}
 
-	for i := range buf[1:] {
-		realIndex := i + 1
-		if !isNameChar(rune(buf[realIndex])) {
-			return realIndex
+	for i := 1; i < len(buf); i++ {
+		if !isNameChar(rune(buf[i])) {
+			return i
 		}
 	}
 
