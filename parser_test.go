@@ -114,7 +114,11 @@ func TestStartElement_NextAttribute(t *testing.T) {
 
 	for {
 		attrName, attrVal, err := startTag.NextAttribute()
-		require.NoError(t, err)
+		if err != nil {
+			require.ErrorIs(t, io.EOF, err)
+
+			return
+		}
 
 		t.Logf("%q => %q", attrName, attrVal)
 	}
@@ -126,16 +130,16 @@ func TestParser_Next(t *testing.T) {
 `
 
 	mustResult := []string{
-		`*fastxml.StartElement: &{{"" "ab"} []}`,
+		`*fastxml.StartElement: &{"ab" ""}`,
 		`*xml.CharData: &" some data in between"`,
 		`*xml.EndElement: &{{"" "ab"}}`,
 		`*xml.CharData: &"<tag>  "`,
 		`*xml.Comment: &"-comment- "`,
-		`*fastxml.StartElement: &{{"" "a"} []}`,
-		`*fastxml.StartElement: &{{"" "br"} []}`,
+		`*fastxml.StartElement: &{"a" ""}`,
+		`*fastxml.StartElement: &{"br" ""}`,
 		`*xml.EndElement: &{{"" "br"}}`,
 		`*xml.CharData: &"\n"`,
-		`*fastxml.StartElement: &{{"" "br"} []}`,
+		`*fastxml.StartElement: &{"br" " />"}`,
 		`*xml.EndElement: &{{"" "br"}}`,
 		`*xml.CharData: &" end value \n"`,
 	}

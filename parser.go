@@ -196,7 +196,10 @@ func (p *Parser) decodeSimpleTag(buf []byte) (xml.Token, error) {
 	}
 
 	p.innerData.startElement.Name = tagName
-	p.innerData.startElement.attrBuf = buf[tagNameIdx+1:]
+	p.innerData.startElement.attrBuf = nil
+	if buf[tagNameIdx+1] != '>' && buf[tagNameIdx+1] != '/' {
+		p.innerData.startElement.attrBuf = buf[tagNameIdx+1:]
+	}
 
 	// Currently we are not supporting attributes.
 	// Plan is to have some sort of a function that will parse attributes on demand.
