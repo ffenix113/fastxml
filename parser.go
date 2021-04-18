@@ -40,9 +40,6 @@ type Parser struct {
 	}
 	// currentPointer ALWAYS points to next byte that needs to be processed.
 	currentPointer uint32
-	// nextOffset specifies how many bytes were read on last token decoding.
-	// This value MUST be added to `currentPointer` before next call to Next.
-	nextOffset uint32
 }
 
 // NewParser will create a parser from input bytes.
@@ -72,7 +69,6 @@ func (p *Parser) Next() (xml.Token, error) {
 		return p.sendSelfClosingEnd(), nil
 	}
 
-	p.currentPointer += p.nextOffset
 	if p.currentPointer >= uint32(len(p.buf)) {
 		return nil, io.EOF
 	}
@@ -82,7 +78,7 @@ func (p *Parser) Next() (xml.Token, error) {
 		return nil, err
 	}
 
-	p.nextOffset = uint32(len(tokenBytes))
+	p.currentPointer += uint32(len(tokenBytes))
 
 	token, err := p.decodeToken(tokenBytes)
 	if err != nil {
