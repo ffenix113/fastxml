@@ -18,18 +18,6 @@ var (
 	ErrInvalidClosingElement = errors.New("invalid closing tag")
 )
 
-// This is just for reference of available types.
-var _ = []interface{}{
-	xml.Attr{},         // <tag name="val" another='val'>
-	xml.CharData{},     // "text between tags"
-	xml.Comment{},      // <!-- comment -->
-	xml.Directive{},    // <!directive>
-	xml.StartElement{}, // <some_tag>
-	xml.EndElement{},   // </some_tag>
-	xml.ProcInst{},     // <?xml encoding="UTF-8" ?>
-	// CDATA			// <![CDATA[...]]> - where '...' is raw string, no parsing.
-}
-
 // TokenDecoderFunc if no token can be decoded - error MUST be returned.
 type TokenDecoderFunc func([]byte) (xml.Token, error)
 
@@ -43,14 +31,12 @@ type Parser struct {
 	lastTagName string
 	// innerData holds all available types that will be returned to the caller.
 	innerData struct {
-		attr         xml.Attr      // <tag name="val" another='val'>
-		charData     xml.CharData  // "text between tags"
-		comment      xml.Comment   // <!-- comment -->
-		directive    xml.Directive // <!directive>
-		startElement StartElement  // <some_tag>
-		//startElement xml.StartElement // <some_tag>
-		endElement xml.EndElement // </some_tag>
-		procInst   xml.ProcInst   // <?xmxl encoding="UTF-8" ?>
+		charData     CharData     // "text between tags"
+		comment      Comment      // <!-- comment -->
+		directive    Directive    // <!directive>
+		startElement StartElement // <some_tag>
+		endElement   EndElement   // </some_tag>
+		procInst     ProcInst     // <?xmxl encoding="UTF-8" ?>
 	}
 	// currentPointer ALWAYS points to next byte that needs to be processed.
 	currentPointer uint32
@@ -155,12 +141,15 @@ func (p *Parser) decodeClosingTag(buf []byte) (xml.Token, error) {
 		return nil, ErrInvalidClosingElement
 	}
 
-	nameEndIdx := scanTillWordEnd(buf[2:])
+	buf = buf[2:]
+
+	nameEndIdx := scanTillWordEnd(buf)
 	if nameEndIdx == 0 {
 		return nil, ErrInvalidClosingElement
 	}
 
-	p.innerData.endElement.Name.Local = unsafeByteToString(buf[2 : 2+nameEndIdx])
+	_ = buf[nameEndIdx] // Remove boundary check
+	p.innerData.endElement.Name.Local = unsafeByteToString(buf[:nameEndIdx])
 
 	return &p.innerData.endElement, nil
 }
@@ -199,6 +188,7 @@ func (p *Parser) decodeSimpleTag(buf []byte) (xml.Token, error) {
 
 	p.innerData.startElement.Name = tagName
 	p.innerData.startElement.attrBuf = nil
+
 	if buf[tagNameIdx+1] != '>' && buf[tagNameIdx+1] != '/' {
 		p.innerData.startElement.attrBuf = buf[tagNameIdx+1:]
 	}

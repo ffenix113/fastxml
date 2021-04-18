@@ -1,7 +1,6 @@
 package fastxml
 
 import (
-	"encoding/xml"
 	"errors"
 	"fmt"
 	"io"
@@ -137,17 +136,17 @@ func TestParser_Next(t *testing.T) {
 
 	mustResult := []string{
 		`*fastxml.StartElement: &{"ab" ""}`,
-		`*xml.CharData: &" some data in between"`,
-		`*xml.EndElement: &{{"" "ab"}}`,
-		`*xml.CharData: &"<tag>  "`,
-		`*xml.Comment: &"-comment- "`,
+		`*fastxml.CharData: &" some data in between"`,
+		`*fastxml.EndElement: &{{"" "ab"}}`,
+		`*fastxml.CharData: &"<tag>  "`,
+		`*fastxml.Comment: &"-comment- "`,
 		`*fastxml.StartElement: &{"a" ""}`,
 		`*fastxml.StartElement: &{"br" ""}`,
-		`*xml.EndElement: &{{"" "br"}}`,
-		`*xml.CharData: &"\n"`,
+		`*fastxml.EndElement: &{{"" "br"}}`,
+		`*fastxml.CharData: &"\n"`,
 		`*fastxml.StartElement: &{"br" " />"}`,
-		`*xml.EndElement: &{{"" "br"}}`,
-		`*xml.CharData: &" end value \n"`,
+		`*fastxml.EndElement: &{{"" "br"}}`,
+		`*fastxml.CharData: &" end value \n"`,
 	}
 
 	p := NewParser([]byte(data), false)
@@ -200,7 +199,7 @@ func TestDecodeClosingTag(t *testing.T) {
 				require.NoError(t, err)
 			}
 
-			assert.Equal(t, test.result, token.(*xml.EndElement).Name.Local)
+			assert.Equal(t, test.result, token.(*EndElement).Name.Local)
 		})
 	}
 }
