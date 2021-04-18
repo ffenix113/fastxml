@@ -21,6 +21,8 @@ type StartElement struct {
 	attrBuf []byte
 }
 
+// NextAttribute will return next set of attribute name and value.
+// This method will return io.EOF when no more attributes will be returned.
 func (s *StartElement) NextAttribute() (attrName, attrVal string, err error) {
 	if len(s.attrBuf) <= 4 {
 		return "", "", io.EOF

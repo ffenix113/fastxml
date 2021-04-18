@@ -66,7 +66,11 @@ func NewParser(buf []byte, mustCopy bool) *Parser {
 // Caller MUST NOT hold onto returned tokens. Instead it may store data from them, but don't hold onto pointers.
 func (p *Parser) Next() (xml.Token, error) {
 	if p.lastTagName != "" {
-		return p.sendSelfClosingEnd(), nil
+		token := p.sendSelfClosingEnd()
+
+		p.lastTagName = ""
+
+		return token, nil
 	}
 
 	if p.currentPointer >= uint32(len(p.buf)) {
@@ -101,32 +105,24 @@ func (p *Parser) decodeToken(buf []byte) (xml.Token, error) { //nolint:gocyclo,c
 		return nil, ErrNotAValidTag
 	}
 
-	var decoderFunc TokenDecoderFunc
-
 	switch {
 	case buf[0] != '<':
-		decoderFunc = p.decodeString
+		return p.decodeString(buf)
 	case buf[0] == '<' && buf[1] == '/':
-		decoderFunc = p.decodeClosingTag
+		return p.decodeClosingTag(buf)
 	case len(buf) >= 7 && buf[0] == '<' && buf[1] == '!' && buf[2] == '-' && buf[3] == '-':
-		decoderFunc = p.decodeComment
+		return p.decodeComment(buf)
 	case len(buf) >= 11 && buf[0] == '<' && buf[1] == '!' && buf[2] == '[':
-		decoderFunc = p.decodeCdata
-	case buf[0] == '<' && buf[1] == '?' && isNameStartChar(rune(buf[3])):
+		return p.decodeCdata(buf)
+	case buf[0] == '<' && buf[1] == '?':
 		return nil, errors.New("unknown implementation for processing instruction")
 	default: // This will be our "catch-all" start tag decoder.
-		decoderFunc = p.decodeSimpleTag
+		return p.decodeSimpleTag(buf)
 	}
-
-	return decoderFunc(buf)
 }
 
 func (p *Parser) sendSelfClosingEnd() xml.Token {
-	const emptyString = ""
-
 	p.innerData.endElement.Name.Local = p.lastTagName
-
-	p.lastTagName = emptyString
 
 	return &p.innerData.endElement
 }

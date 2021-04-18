@@ -29,10 +29,8 @@ func FetchNextToken(buf []byte) (data []byte, err error) {
 	// Value of 0 tells that not enough data was fed to fetch full tag.
 	var tagEnd int
 
-	nextByte := buf[0]
-
 	switch {
-	case nextByte == '<': // All XML tags start with '<'.
+	case buf[0] == '<': // All XML tags start with '<'.
 		tagEnd, err = scanFullTag(buf)
 	default: // Treat as text.
 		tagEnd, err = scanFullCharData(buf)
@@ -52,7 +50,7 @@ func FetchNextToken(buf []byte) (data []byte, err error) {
 // scanFullTag will return end index of the current tag.
 //
 // It might return error on some broken tags.
-func scanFullTag(buf []byte) (int, error) { //nolint:unparam // Error is required to match signature.
+func scanFullTag(buf []byte) (int, error) {
 	// CDATA needs special treatment as it may contain '>' and '<', and other characters which
 	// is forbidden in other tags.
 	if bytes.HasPrefix(buf, cdataPrefByte) {
