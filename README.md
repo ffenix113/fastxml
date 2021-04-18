@@ -15,7 +15,7 @@ improving simplicity and performance of parsing.
 
 ### Q&A
 Q: Can it be used it in production?  
-A: I wouldn't recommend it just yet.
+A: I wouldn't recommend it just yet. API and types also might change until stable release.
 
 Q: If it is using `unsafe` does this mean that it can break something?  
 A: No. It is using `unsafe` for only reason to point to specific memory for strings, nothing else.
