@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"unicode"
 	"unicode/utf8"
 	"unsafe"
 )
@@ -181,8 +180,17 @@ func (p *Parser) decodeSimpleTag(buf []byte) (xml.Token, error) {
 	p.innerData.startElement.Name = tagName
 	p.innerData.startElement.attrBuf = nil
 
-	if buf[tagNameIdx+1] != '>' && buf[tagNameIdx+1] != '/' {
-		p.innerData.startElement.attrBuf = buf[tagNameIdx+1:]
+	buf = buf[tagNameIdx+1:]
+
+	// Skip byte if it is space
+	var skipIdx int
+	for ; skipIdx < len(buf) && IsHTMLSpaceChar(rune(buf[skipIdx])); skipIdx++ {
+	}
+
+	buf = buf[skipIdx:]
+
+	if buf[0] != '>' && buf[0] != '/' {
+		p.innerData.startElement.attrBuf = buf
 	}
 
 	// Currently we are not supporting attributes.
@@ -280,7 +288,7 @@ func NextWordIndex(buf []byte) (start, end int, err error) {
 		rn, size = utf8.DecodeRune(buf[currPtr:])
 
 		// Check if name is finished
-		if unicode.IsSpace(rn) || rn == '=' {
+		if IsHTMLSpaceChar(rn) || rn == '=' {
 			return start, currPtr, nil
 		}
 
@@ -321,11 +329,20 @@ func NextQuotedWordIndex(buf []byte) (start, end int, err error) {
 func NextNonSpaceIndex(buf []byte) (idx int) {
 	for {
 		rn, size := utf8.DecodeRune(buf[idx:])
-		if !unicode.IsSpace(rn) {
+		if !IsHTMLSpaceChar(rn) {
 			return
 		}
 
 		idx += size
+	}
+}
+
+func IsHTMLSpaceChar(rn rune) bool {
+	switch rn {
+	case ' ', '\t', '\r', '\n':
+		return true
+	default:
+		return false
 	}
 }
 

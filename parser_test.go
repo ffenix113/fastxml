@@ -144,7 +144,7 @@ func TestParser_Next(t *testing.T) {
 		`*fastxml.StartElement: &{"br" ""}`,
 		`*fastxml.EndElement: &{{"" "br"}}`,
 		`*fastxml.CharData: &"\n"`,
-		`*fastxml.StartElement: &{"br" " />"}`,
+		`*fastxml.StartElement: &{"br" ""}`,
 		`*fastxml.EndElement: &{{"" "br"}}`,
 		`*fastxml.CharData: &" end value \n"`,
 	}
