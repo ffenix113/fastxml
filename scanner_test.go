@@ -86,10 +86,10 @@ func TestNextTokenStartIndex(t *testing.T) {
 		result     int
 	}{
 		{"", "", -1},
-		{"", "<", -1},
-		{"", "< ", -1},
-		{"", "   ", -1},
-		{"", "  dasd   ", -1},
+		{"", "<", 0},
+		{"", "< ", 0},
+		{"", "   ", 0},
+		{"", "  dasd   ", 0},
 		{"", " <", 1},
 		{"", `<aa dad=aa>this is a char data<`, 30},
 		{"", `<aa dad=aa><`, 11},

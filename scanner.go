@@ -110,15 +110,13 @@ func scanTillWordEnd(buf []byte) int {
 // Function will check range buf[1:] to skip first byte, which can(and will be) be a tag start token.
 //
 // Value of searchByte must be '<' or '>' or other escapable XML character.
+//
+// If len(buf) < 1 then -1 will be returned
+// If searchByte was not found in the buf - 0 will be returned, otherwise index of searchByte + 1 will be returned.
 func nextTokenStartIndex(buf []byte, searchByte byte) int {
 	if len(buf) < 1 {
 		return -1
 	}
 
-	idx := bytes.IndexByte(buf[1:], searchByte)
-	if idx == -1 {
-		return -1
-	}
-
-	return idx + 1
+	return bytes.IndexByte(buf[1:], searchByte) + 1
 }
