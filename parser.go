@@ -347,9 +347,9 @@ func IsHTMLSpaceChar(rn rune) bool {
 }
 
 func isNameStartChar(rn rune) bool {
-	return rn == ':' || rn == '_' ||
-		(rn >= 'a' && rn <= 'z') ||
-		(rn >= 'A' && rn <= 'Z')
+	return (rn >= 'a' && rn <= 'z') ||
+		(rn >= 'A' && rn <= 'Z') ||
+		rn == ':' || rn == '_'
 }
 
 func isNameChar(rn rune) bool {
