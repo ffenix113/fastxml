@@ -105,70 +105,73 @@ func TestNextTokenStartIndex(t *testing.T) {
 }
 
 func BenchmarkScanTag(b *testing.B) {
-	buf := prepareFileBuf(b, "testdata/large.xml")
+	benchmarks := []struct {
+		name string
+		file string
+	}{
+		{"small", "small.xml"},
+		{"large", "psd7003.xml"},
+	}
 
-	var lines int
+	for _, bench := range benchmarks {
+		b.Run(bench.name, func(b *testing.B) {
+			b.Run("fastxml", func(b *testing.B) {
+				b.ReportAllocs()
 
-	b.Run("fastxml", func(b *testing.B) {
-		b.ResetTimer()
-		b.SetBytes(int64(len(buf)))
-		b.ReportAllocs()
+				buf := prepareFileBuf(b, "testdata/"+bench.file)
+				b.ResetTimer()
+				b.SetBytes(int64(len(buf)))
 
-		for i := 0; i < b.N; i++ {
-			lines = 0
+				for i := 0; i < b.N; i++ {
+					p := NewParser(buf, false)
 
-			p := NewParser(buf, false)
+					for {
+						_, err := p.Next()
+						if err != nil {
+							if errors.Is(err, io.EOF) {
+								break
+							}
 
-			for {
-				_, err := p.Next()
-				if err != nil {
-					if errors.Is(err, io.EOF) {
-						break
+							b.Fatal(err.Error())
+						}
+					}
+				}
+			})
+
+			b.Run("encoding/xml", func(b *testing.B) {
+				b.SkipNow()
+
+				b.ReportAllocs()
+
+				buf := prepareFileBuf(b, "testdata/"+bench.file)
+
+				b.ResetTimer()
+				b.SetBytes(int64(len(buf)))
+
+				reader := bytes.NewReader(buf)
+
+				for i := 0; i < b.N; i++ {
+					reader.Seek(0, io.SeekStart)
+
+					dec := xml.NewDecoder(reader)
+					dec.CharsetReader = func(charset string, input io.Reader) (io.Reader, error) {
+						return input, nil
 					}
 
-					b.Fatal(err.Error())
-				}
+					for {
+						_, err := dec.Token()
+						if err != nil {
+							if errors.Is(err, io.EOF) {
+								break
+							}
 
-				lines++
-			}
-		}
-
-		assert.Equal(b, 3068929, lines)
-	})
-
-	b.Run("encoding/xml", func(b *testing.B) {
-		b.ResetTimer()
-		b.SetBytes(int64(len(buf)))
-		b.ReportAllocs()
-
-		reader := bytes.NewReader(buf)
-
-		for i := 0; i < b.N; i++ {
-			lines = 0
-
-			reader.Seek(0, io.SeekStart)
-
-			dec := xml.NewDecoder(reader)
-			dec.CharsetReader = func(charset string, input io.Reader) (io.Reader, error) {
-				return input, nil
-			}
-
-			for {
-				_, err := dec.Token()
-				if err != nil {
-					if errors.Is(err, io.EOF) {
-						break
+							b.Fatal(err.Error())
+						}
 					}
-
-					b.Fatal(err.Error())
 				}
-
-				lines++
-			}
-		}
-
-		assert.Equal(b, 3068929, lines)
-	})
+			})
+		})
+	}
 }
 
 func TestStartToken_HasAttributes(t *testing.T) {
