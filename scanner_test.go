@@ -171,6 +171,45 @@ func BenchmarkScanTag(b *testing.B) {
 	})
 }
 
+func TestStartToken_HasAttributes(t *testing.T) {
+	tests := []struct {
+		name   string
+		tag    string
+		result bool
+	}{
+		{"simple no", "<a>", false},
+		{"simple no self closing", "<a/>", false},
+		{"simple no self closing #2", "<a />", false},
+		{"simple no self closing more spaces", "<a       	\n/>", false},
+		{"simple yes", "<a tag='2'>", true},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			tag, err := (&Parser{}).decodeSimpleTag([]byte(test.tag))
+			require.NoError(t, err)
+
+			startTag := tag.(*StartElement)
+
+			require.Equal(t, test.result, startTag.HasAttributes())
+		})
+	}
+}
+
+func BenchmarkNextTokenStartIndex(b *testing.B) {
+	data := []byte("<daadsafyuv att='val' ddd=''>")
+
+	var idx int
+
+	for i := 0; i < b.N; i++ {
+		idx = nextTokenStartIndex(data, '=')
+	}
+
+	if idx != 15 {
+		require.Equal(b, 15, idx)
+	}
+}
+
 func prepareFileBuf(b *testing.B, filePath string) []byte {
 	b.Helper()
 

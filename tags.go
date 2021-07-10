@@ -21,6 +21,14 @@ type StartElement struct {
 	attrBuf []byte
 }
 
+// HasAttributes only specifies if current tag has attributes.
+//
+// Resulting value cannot be used to check if more attributes are available,
+// instead this method answer question "does this tag have attributes".
+func (s *StartElement) HasAttributes() bool {
+	return s.attrBuf != nil
+}
+
 // NextAttribute will return next set of attribute name and value.
 // This method will return io.EOF when no more attributes will be returned.
 func (s *StartElement) NextAttribute() (attrName, attrVal string, err error) {
