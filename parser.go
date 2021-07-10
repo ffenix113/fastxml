@@ -357,15 +357,6 @@ func isNameChar(rn rune) bool {
 		(rn >= '0' && rn <= '9')
 }
 
-func isValidChar(rn rune) bool {
-	return rn == 0x09 ||
-		rn == 0x0A ||
-		rn == 0x0D ||
-		rn >= 0x20 && rn <= 0xD7FF ||
-		rn >= 0xE000 && rn <= 0xFFFD ||
-		rn >= 0x10000 && rn <= 0x10FFFF
-}
-
 func unsafeByteToString(b []byte) string {
 	return *(*string)(unsafe.Pointer(&b)) // nolint:gosec // This is valid and simple conversion.
 }
