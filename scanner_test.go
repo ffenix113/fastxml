@@ -126,13 +126,22 @@ func BenchmarkScanTag(b *testing.B) {
 					p := NewParser(buf, false)
 
 					for {
-						_, err := p.Next()
+						tkn, err := p.Next()
 						if err != nil {
 							if errors.Is(err, io.EOF) {
 								break
 							}
 
 							b.Fatal(err.Error())
+						}
+
+						if startToken, ok := tkn.(*StartToken); ok {
+							if startToken.HasAttributes() {
+								var err error
+								for err == nil {
+									_, _, err = startToken.NextAttribute()
+								}
+							}
 						}
 					}
 				}
@@ -192,7 +201,7 @@ func TestStartToken_HasAttributes(t *testing.T) {
 			tag, err := (&Parser{}).decodeSimpleTag([]byte(test.tag))
 			require.NoError(t, err)
 
-			startTag := tag.(*StartElement)
+			startTag := tag.(*StartToken)
 
 			require.Equal(t, test.result, startTag.HasAttributes())
 		})

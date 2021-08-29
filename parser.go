@@ -30,12 +30,12 @@ type Parser struct {
 	lastTagName string
 	// innerData holds all available types that will be returned to the caller.
 	innerData struct {
-		charData     CharData     // "text between tags"
-		comment      Comment      // <!-- comment -->
-		directive    Directive    // <!directive>
-		startElement StartElement // <some_tag>
-		endElement   EndElement   // </some_tag>
-		procInst     ProcInst     // <?xmxl encoding="UTF-8" ?>
+		charData     CharData   // "text between tags"
+		comment      Comment    // <!-- comment -->
+		directive    Directive  // <!directive>
+		startElement StartToken // <some_tag>
+		endElement   EndElement // </some_tag>
+		procInst     ProcInst   // <?xmxl encoding="UTF-8" ?>
 	}
 	// currentPointer ALWAYS points to next byte that needs to be processed.
 	currentPointer uint32
@@ -114,7 +114,7 @@ func (p *Parser) decodeToken(buf []byte) (xml.Token, error) { //nolint:gocyclo,c
 	case len(buf) >= 11 && buf[0] == '<' && buf[1] == '!' && buf[2] == '[':
 		return p.decodeCdata(buf)
 	case buf[0] == '<' && buf[1] == '?':
-		return nil, errors.New("unknown implementation for processing instruction")
+		return nil, nil // No implementation is available currently.
 	default: // This will be our "catch-all" start tag decoder.
 		return p.decodeSimpleTag(buf)
 	}
