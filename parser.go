@@ -17,6 +17,12 @@ var (
 	ErrInvalidClosingElement = errors.New("invalid closing tag")
 )
 
+var (
+	docTypePrefix = []byte("<!DOCTYPE")
+	elementPrefix = []byte("<!ELEMENT")
+	attListPrefix = []byte("<!ATTLIST")
+)
+
 // TokenDecoderFunc if no token can be decoded - error MUST be returned.
 type TokenDecoderFunc func([]byte) (xml.Token, error)
 
@@ -47,8 +53,7 @@ type Parser struct {
 // set `mustCopy` to true and parser will copy full buffer to new slice and will use that.
 func NewParser(buf []byte, mustCopy bool) *Parser {
 	if mustCopy {
-		newBuf := make([]byte, len(buf))
-		copy(newBuf, buf)
+		newBuf := append([]byte(nil), buf...)
 
 		buf = newBuf
 	}
@@ -60,9 +65,23 @@ func NewParser(buf []byte, mustCopy bool) *Parser {
 	return &p
 }
 
+// Peek can be used to fetch next token without actually advancing parser.
+//
+// Basically it is wrapper for Parser.Next with state restoration.
+func (p *Parser) Peek() (xml.Token, error) {
+	lastPos, lastTagName := p.currentPointer, p.lastTagName
+	defer func() {
+		p.currentPointer, p.lastTagName = lastPos, lastTagName
+	}()
+
+	return p.Next()
+}
+
 // Next will return next token and error, if any.
 //
-// Caller MUST NOT hold onto returned tokens. Instead it may store data from them, but don't hold onto pointers.
+// Returned token will always be a pointer type.
+//
+// Caller MUST NOT hold onto returned tokens. Instead, it may store data from them, but don't hold onto pointers.
 func (p *Parser) Next() (xml.Token, error) {
 	if p.lastTagName != "" {
 		token := p.sendSelfClosingEnd()
@@ -78,14 +97,14 @@ func (p *Parser) Next() (xml.Token, error) {
 
 	tokenBytes, err := FetchNextToken(p.buf[p.currentPointer:])
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("fetch next token: %w", err)
 	}
 
 	p.currentPointer += uint32(len(tokenBytes))
 
 	token, err := p.decodeToken(tokenBytes)
 	if err != nil {
-		return nil, fmt.Errorf("index position %d: %w", p.currentPointer, err)
+		return nil, fmt.Errorf("decode token: index position %d: %w", p.currentPointer, err)
 	}
 
 	return token, nil
@@ -109,12 +128,14 @@ func (p *Parser) decodeToken(buf []byte) (xml.Token, error) { //nolint:gocyclo,c
 		return p.decodeString(buf)
 	case buf[0] == '<' && buf[1] == '/':
 		return p.decodeClosingTag(buf)
-	case len(buf) >= 7 && buf[0] == '<' && buf[1] == '!' && buf[2] == '-' && buf[3] == '-':
+	case buf[0] == '<' && buf[1] == '!' && buf[2] == '-' && buf[3] == '-':
 		return p.decodeComment(buf)
 	case len(buf) >= 11 && buf[0] == '<' && buf[1] == '!' && buf[2] == '[':
 		return p.decodeCdata(buf)
 	case buf[0] == '<' && buf[1] == '?':
 		return nil, nil // No implementation is available currently.
+	case buf[0] == '<' && buf[1] == '!':
+		return p.decodeDeclaration(buf) // Some sort of declaration(ignore, element, attrlist, etc).
 	default: // This will be our "catch-all" start tag decoder.
 		return p.decodeSimpleTag(buf)
 	}
@@ -147,7 +168,7 @@ func (p *Parser) decodeClosingTag(buf []byte) (xml.Token, error) {
 
 func (p *Parser) decodeComment(buf []byte) (xml.Token, error) {
 	commentEndIdx := bytes.Index(buf, []byte{'-', '-', '>'})
-	if commentEndIdx == -1 || buf[commentEndIdx-1] == '-' {
+	if commentEndIdx == -1 || (buf[commentEndIdx-1] == '-' && len(buf) <= 7) {
 		return nil, errors.New("comment is not properly formatted")
 	}
 
@@ -197,6 +218,17 @@ func (p *Parser) decodeSimpleTag(buf []byte) (xml.Token, error) {
 	// Plan is to have some sort of a function that will parse attributes on demand.
 
 	return &p.innerData.startElement, nil
+}
+
+func (p *Parser) decodeDeclaration(buf []byte) (xml.Token, error) {
+	switch {
+	case bytes.HasPrefix(buf, docTypePrefix),
+		bytes.HasPrefix(buf, elementPrefix),
+		bytes.HasPrefix(buf, attListPrefix):
+		return nil, nil
+	default:
+		return nil, fmt.Errorf("unknown declaration: %s", buf[:NextNonSpaceIndex(buf)])
+	}
 }
 
 func decodeTagAttribute(buf []byte) (string, string, int, error) {
@@ -273,9 +305,9 @@ func NextWordIndex(buf []byte) (start, end int, err error) {
 	start = NextNonSpaceIndex(buf)
 	currPtr := start
 
-	rn, size := utf8.DecodeRune(buf[currPtr:])
-	if !isNameStartChar(rn) {
-		return currPtr, 0, fmt.Errorf("rune is not valid start of name: '%c'", rn)
+	decodedRune, size := utf8.DecodeRune(buf[currPtr:])
+	if !isNameStartChar(decodedRune) {
+		return currPtr, 0, fmt.Errorf("rune is not valid start of name: '%c'", decodedRune)
 	}
 
 	for {
@@ -285,15 +317,15 @@ func NextWordIndex(buf []byte) (start, end int, err error) {
 			return start, currPtr, nil
 		}
 
-		rn, size = utf8.DecodeRune(buf[currPtr:])
+		decodedRune, size = utf8.DecodeRune(buf[currPtr:])
 
 		// Check if name is finished
-		if IsHTMLSpaceChar(rn) || rn == '=' {
+		if IsHTMLSpaceChar(decodedRune) || decodedRune == '=' {
 			return start, currPtr, nil
 		}
 
-		if !isNameChar(rn) {
-			return currPtr, 0, fmt.Errorf("rune is not valid name part: '%c'", rn)
+		if !isNameChar(decodedRune) {
+			return currPtr, 0, fmt.Errorf("rune is not valid name part: '%c'", decodedRune)
 		}
 	}
 }

@@ -32,11 +32,13 @@ func (s *StartToken) HasAttributes() bool {
 // NextAttribute will return next set of attribute name and value.
 // This method will return io.EOF when no more attributes will be returned.
 //
-// By specification tags should not contain any attributes with repeated names (https://www.w3.org/TR/2006/REC-xml11-20060816/#uniqattspec).
-// Currently this parser does not adhere to this requirement, meaning that if this parser will parse tag with attributes with same names -
+// By specification tags should not contain any attributes with
+// repeated names (https://www.w3.org/TR/2006/REC-xml11-20060816/#uniqattspec).
+// Currently, this parser does not adhere to this requirement,
+// meaning that if this parser will parse tag with attributes with same names -
 // they still will be returned and no error will be produced.
 //
-// So tag with this attributes will be properly parsed: <a a='1' a='2'>, with two attributes being returned: a=1, a=2.
+// So tag with these attributes will be properly parsed: <a a='1' a='2'>, with two attributes being returned: a=1, a=2.
 func (s *StartToken) NextAttribute() (attrName, attrVal string, err error) {
 	if len(s.attrBuf) <= 4 {
 		return "", "", io.EOF

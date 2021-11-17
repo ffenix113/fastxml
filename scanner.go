@@ -3,18 +3,19 @@ package fastxml
 import (
 	"bytes"
 	"errors"
+	"fmt"
 )
 
 var (
-	cdataPrefByte = []byte(cdataPref)
-	cdataSufByte  = []byte(cdataSuf)
+	cdataPrefix   = []byte("<![CDATA[")
+	cdataSuffix   = []byte("]]>")
+	commentPrefix = []byte("<!--")
+	commentSuffix = []byte("-->")
 )
 
-const (
-	cdataPref    = "<![CDATA["
-	cdataPrefLen = len(cdataPref)
-	cdataSuf     = "]]>"
-	cdataSufLen  = len(cdataSuf)
+var (
+	cdataPrefLen = len(cdataPrefix)
+	cdataSufLen  = len(cdataSuffix)
 )
 
 // FetchNextToken will return next tag bytes.
@@ -30,6 +31,8 @@ func FetchNextToken(buf []byte) (data []byte, err error) {
 	var tagEnd int
 
 	switch {
+	case isSpecialTag(buf):
+		tagEnd, err = scanSpecial(buf)
 	case buf[0] == '<': // All XML tags start with '<'.
 		tagEnd, err = scanFullTag(buf)
 	default: // Treat as text.
@@ -47,22 +50,55 @@ func FetchNextToken(buf []byte) (data []byte, err error) {
 	return buf[:tagEnd], nil
 }
 
+func isSpecialTag(buf []byte) bool {
+	return bytes.HasPrefix(buf, []byte{'<', '!'})
+}
+
 // scanFullTag will return end index of the current tag.
 //
 // It might return error on some broken tags.
-func scanFullTag(buf []byte) (int, error) {
-	// CDATA needs special treatment as it may contain '>' and '<', and other characters which
-	// is forbidden in other tags.
-	if bytes.HasPrefix(buf, cdataPrefByte) {
-		endIdx := bytes.Index(buf, cdataSufByte)
-		if endIdx == -1 {
-			return 0, errors.New("no CDATA suffix found")
-		}
+func scanFullTag(buf []byte) (int, error) { //nolint:
+	return nextTokenStartIndex(buf, '>') + 1, nil
+}
 
-		return endIdx + cdataSufLen, nil
+func scanSpecial(buf []byte) (int, error) {
+	switch {
+	case bytes.HasPrefix(buf, cdataPrefix):
+		return scanCDATADeclaration(buf)
+	case bytes.HasPrefix(buf, docTypePrefix):
+		return scanDoctypeDeclaration(buf)
+	case bytes.HasPrefix(buf, commentPrefix):
+		return scanComment(buf)
+	default:
+		return 0, fmt.Errorf("unknown declaration: %s", buf[:NextNonSpaceIndex(buf)])
+	}
+}
+
+func scanCDATADeclaration(buf []byte) (int, error) {
+	endIdx := bytes.Index(buf, cdataSuffix)
+	if endIdx == -1 {
+		return 0, errors.New("no CDATA suffix found")
 	}
 
-	return nextTokenStartIndex(buf, '>') + 1, nil
+	return endIdx + cdataSufLen, nil
+}
+
+func scanDoctypeDeclaration(buf []byte) (int, error) {
+	closeBracket := nextTokenStartIndex(buf, ']')
+	if closeBracket == -1 {
+		return nextTokenStartIndex(buf, '>'), nil
+	}
+
+	return closeBracket + nextTokenStartIndex(buf[closeBracket:], '>'), nil
+}
+
+func scanComment(buf []byte) (int, error) {
+	idx := bytes.Index(buf, commentSuffix)
+	if idx == -1 {
+		return 0, errors.New("comment does not have closing suffix")
+	}
+
+	return idx + len(commentSuffix), nil
 }
 
 // scanFulLCharData will return end index of char data.

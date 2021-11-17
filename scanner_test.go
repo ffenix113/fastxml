@@ -110,7 +110,6 @@ func BenchmarkScanTag(b *testing.B) {
 		file string
 	}{
 		{"small", "small.xml"},
-		{"large", "psd7003.xml"},
 	}
 
 	for _, bench := range benchmarks {
@@ -148,8 +147,6 @@ func BenchmarkScanTag(b *testing.B) {
 			})
 
 			b.Run("encoding/xml", func(b *testing.B) {
-				b.SkipNow()
-
 				b.ReportAllocs()
 
 				buf := prepareFileBuf(b, "testdata/"+bench.file)
