@@ -57,7 +57,7 @@ func isSpecialTag(buf []byte) bool {
 // scanFullTag will return end index of the current tag.
 //
 // It might return error on some broken tags.
-func scanFullTag(buf []byte) (int, error) { //nolint:
+func scanFullTag(buf []byte) (int, error) {
 	return nextTokenStartIndex(buf, '>') + 1, nil
 }
 
