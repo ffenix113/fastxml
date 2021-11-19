@@ -31,6 +31,5 @@ testdata/suite:
 
 testdata/small.xml:
 	wget -O small.gz http://aiweb.cs.washington.edu/research/projects/xmltk/xmldata/data/tpc-h/customer.xml.gz
-	mkdir $(MAKEFILE_PATH)/testdata
 	zcat small.gz > $(MAKEFILE_PATH)/testdata/small.xml
 	rm small.gz
