@@ -25,7 +25,8 @@ testdata: testdata/suite testdata/small.xml
 
 testdata/suite:
 	wget -O suite.tar.gz https://www.w3.org/XML/Test/xmlts20130923.tar.gz
-	tar -xfC $(MAKEFILE_PATH)/testdata/suite.tar.gz
+	mkdir $(MAKEFILE_PATH)/testdata/suite
+	tar --strip-components=1 -xf suite.tar.gz -C $(MAKEFILE_PATH)testdata/suite
 	rm suite.tar.gz
 
 testdata/small.xml:
