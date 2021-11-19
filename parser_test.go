@@ -231,6 +231,11 @@ func TestParser_DecodeToken(t *testing.T) {
 			result: Comment(` testing chardata with a string of sample legal char except '<' and '&' nor does it contain sequence "]]>" `),
 		},
 		{
+			name:   "empty valid comment",
+			input:  `<!---->`,
+			result: Comment(""),
+		},
+		{
 			name:  "small invalid comment",
 			input: `<!--->`,
 			err:   "decode token: index position 6: comment is not properly formatted",

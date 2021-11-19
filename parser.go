@@ -168,7 +168,7 @@ func (p *Parser) decodeClosingTag(buf []byte) (xml.Token, error) {
 
 func (p *Parser) decodeComment(buf []byte) (xml.Token, error) {
 	commentEndIdx := bytes.Index(buf, []byte{'-', '-', '>'})
-	if commentEndIdx == -1 || (buf[commentEndIdx-1] == '-' && len(buf) <= 7) {
+	if commentEndIdx == -1 || (buf[commentEndIdx-1] == '-' && len(buf) < 7) {
 		return nil, errors.New("comment is not properly formatted")
 	}
 
