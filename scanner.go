@@ -89,7 +89,7 @@ func scanDoctypeDeclaration(buf []byte) (int, error) {
 		return nextTokenStartIndex(buf, '>'), nil
 	}
 
-	return closeBracket + nextTokenStartIndex(buf[closeBracket:], '>'), nil
+	return closeBracket + nextTokenStartIndex(buf[closeBracket:], '>') + 1, nil
 }
 
 func scanComment(buf []byte) (int, error) {

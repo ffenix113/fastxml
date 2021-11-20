@@ -53,3 +53,36 @@ func (s *StartToken) NextAttribute() (attrName, attrVal string, err error) {
 
 	return
 }
+
+type ErrNoSuchAttribute string
+
+func (a ErrNoSuchAttribute) Error() string {
+	return "no such attribute found: " + string(a)
+}
+
+// GetAttribute will return first value attached to an attribute name and true,
+// or empty string and false.
+func (s *StartToken) GetAttribute(name string) (value string, err error) {
+	var nextAttrIdx int
+	var skipIdx int
+	var attrName string
+
+	for {
+		if len(s.attrBuf)-skipIdx <= 4 {
+			return "", ErrNoSuchAttribute(name)
+		}
+
+		attrName, value, skipIdx, err = decodeTagAttribute(s.attrBuf[nextAttrIdx:])
+		if err != nil {
+			return "", err
+		}
+
+		if attrName == name {
+			return value, nil
+		}
+
+		if skipIdx != -1 {
+			nextAttrIdx += skipIdx
+		}
+	}
+}

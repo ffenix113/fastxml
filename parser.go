@@ -30,6 +30,9 @@ type TokenDecoderFunc func([]byte) (xml.Token, error)
 type Parser struct {
 	// buf holds full data to parse.
 	buf []byte
+	// innerBuf is a buffer that will hold updated data
+	// when it is needed to be manipulated in any way.
+	innerBuf *bytes.Buffer
 	// lastTagName is the last found open tag name.
 	// This is necessary for self closing tags. For them there will be two events:
 	// startElement and then endElement with the same name.
@@ -59,7 +62,8 @@ func NewParser(buf []byte, mustCopy bool) *Parser {
 	}
 
 	p := Parser{
-		buf: buf,
+		buf:      buf,
+		innerBuf: bytes.NewBuffer(nil),
 	}
 
 	return &p
@@ -125,7 +129,7 @@ func (p *Parser) decodeToken(buf []byte) (xml.Token, error) { //nolint:gocyclo,c
 
 	switch {
 	case buf[0] != '<':
-		return p.decodeString(buf)
+		return p.decodeCharData(buf)
 	case buf[0] == '<' && buf[1] == '/':
 		return p.decodeClosingTag(buf)
 	case buf[0] == '<' && buf[1] == '!' && buf[2] == '-' && buf[3] == '-':
@@ -183,8 +187,15 @@ func (p *Parser) decodeCdata(buf []byte) (xml.Token, error) {
 	return &p.innerData.charData, nil
 }
 
-func (p *Parser) decodeString(buf []byte) (xml.Token, error) {
+func (p *Parser) decodeCharData(buf []byte) (xml.Token, error) {
 	p.innerData.charData = buf
+
+	// Based on https://www.w3.org/TR/xml/#sec-line-ends we
+	// always need to normalize carriage returns to new lines.
+	// This currently will allocate, but we must conform to
+	if bytes.ContainsRune(buf, '\r') {
+		p.innerData.charData = p.cleanEOLChars(buf)
+	}
 
 	return &p.innerData.charData, nil
 }
@@ -375,6 +386,31 @@ func IsHTMLSpaceChar(rn rune) bool {
 		return true
 	default:
 		return false
+	}
+}
+
+// cleanEOLChars will normalize '\r' and '\r\n' to '\n'.
+//
+// https://www.w3.org/TR/xml/#sec-line-ends
+func (p *Parser) cleanEOLChars(buf []byte) []byte {
+	crIdx := bytes.IndexByte(buf, '\r')
+	if crIdx == -1 {
+		return buf
+	}
+
+	p.innerBuf.Reset()
+	p.innerBuf.Grow(len(buf))
+
+	for {
+		crIdx = bytes.IndexByte(buf, '\r')
+		if crIdx == -1 {
+			p.innerBuf.Write(buf)
+
+			return p.innerBuf.Bytes()
+		}
+
+		p.innerBuf.Write(buf[:crIdx])
+		buf = buf[crIdx+1:]
 	}
 }
 

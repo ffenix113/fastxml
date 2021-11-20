@@ -1,6 +1,7 @@
 package fastxml
 
 import (
+	"bytes"
 	"encoding/xml"
 	"errors"
 	"fmt"
@@ -8,6 +9,7 @@ import (
 	"os"
 	"path"
 	"reflect"
+	"strings"
 	"testing"
 
 	"fastxml/testdata"
@@ -304,7 +306,6 @@ func TestIBM_XMLSuite(t *testing.T) {
 }
 
 func runXMLGroup(t *testing.T, p *Parser) {
-nextTest:
 	for {
 		token, err := p.Next()
 		require.NoError(t, err)
@@ -335,7 +336,7 @@ nextTest:
 				testFileName = attrValue
 			case "ENTITIES":
 				if attrValue != "none" {
-					break nextTest
+					return
 				}
 			}
 		}
@@ -353,13 +354,24 @@ func runXMLTest(t *testing.T, filePath string) {
 
 	p := NewParser(data, false)
 
+	stdP := xml.NewDecoder(bytes.NewReader(data))
+
 	for {
 		tkn, err := p.Next()
+		stdToken, stdErr := stdP.Token()
+
 		if errors.Is(err, io.EOF) {
 			break
 		} else {
 			require.NoError(t, err, filePath)
 		}
+
+		if stdErr != nil && strings.Contains(stdErr.Error(), "entity &") {
+			continue
+		}
+
+		require.NoError(t, stdErr, filePath)
+		equalTokens(t, tkn, stdToken)
 
 		if start, ok := tkn.(*StartToken); ok {
 			if !start.HasAttributes() {
@@ -375,6 +387,47 @@ func runXMLTest(t *testing.T, filePath string) {
 				}
 			}
 		}
+	}
+}
+
+func equalTokens(tb testing.TB, tkn, stdToken xml.Token) {
+	require := require.New(tb)
+
+	switch typd := tkn.(type) {
+	case *StartToken:
+		std, ok := stdToken.(xml.StartElement)
+		require.True(ok)
+
+		require.Equal(std.Name.Local, typd.Name)
+
+		if !typd.HasAttributes() {
+			require.Empty(std.Attr)
+			return
+		}
+
+		for _, attr := range std.Attr {
+			val, err := typd.GetAttribute(attr.Name.Local)
+
+			require.NoError(err)
+			require.Equal(attr.Value, val)
+		}
+	case *CharData:
+		std, ok := stdToken.(xml.CharData)
+		require.True(ok)
+
+		require.Equal([]byte(std), []byte(*typd))
+	case *Comment:
+		std, ok := stdToken.(xml.Comment)
+		require.True(ok)
+
+		require.Equal([]byte(std), []byte(*typd))
+	case *EndElement:
+		std, ok := stdToken.(xml.EndElement)
+		require.True(ok)
+
+		require.Equal(std.Name.Local, typd.Name.Local)
+	default:
+		tb.Logf("unknown token type: %T, std type is %T", typd, stdToken)
 	}
 }
 
