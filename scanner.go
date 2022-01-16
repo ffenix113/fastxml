@@ -73,22 +73,28 @@ func scanSpecial(buf []byte) (int, error) {
 	}
 }
 
+var piSuffix = []byte{'?', '>'}
+
+var errNoPISuffix = errors.New("no closing bytes found for PI")
+
 func scanProcessingInstruction(buf []byte) (int, error) {
 	const lenOfPrefix = 2
 
-	endIdx := bytes.Index(buf, []byte{'?', '>'})
+	endIdx := bytes.Index(buf, piSuffix)
 
 	if endIdx == -1 {
-		return 0, errors.New("no closing bytes found for PI")
+		return 0, errNoPISuffix
 	}
 
 	return endIdx + lenOfPrefix, nil
 }
 
+var errNoCDATASuffix = errors.New("no CDATA suffix found")
+
 func scanCDATADeclaration(buf []byte) (int, error) {
 	endIdx := bytes.Index(buf, cdataSuffix)
 	if endIdx == -1 {
-		return 0, errors.New("no CDATA suffix found")
+		return 0, errNoCDATASuffix
 	}
 
 	return endIdx + cdataSufLen, nil
@@ -103,10 +109,12 @@ func scanDoctypeDeclaration(buf []byte) (int, error) {
 	return closeBracket + nextTokenStartIndex(buf[closeBracket:], '>') + 1, nil
 }
 
+var errNoCommentSuffix = errors.New("comment does not have closing suffix")
+
 func scanComment(buf []byte) (int, error) {
 	idx := bytes.Index(buf, commentSuffix)
 	if idx == -1 {
-		return 0, errors.New("comment does not have closing suffix")
+		return 0, errNoCommentSuffix
 	}
 
 	return idx + len(commentSuffix), nil

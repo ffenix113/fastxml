@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strconv"
 	"unicode/utf8"
 	"unsafe"
 )
@@ -166,10 +167,12 @@ func (p *Parser) decodeClosingTag(buf []byte) (xml.Token, error) {
 	return &p.innerData.endElement, nil
 }
 
+var errCommentNotProperlyFormatted = errors.New("comment is not properly formatted")
+
 func (p *Parser) decodeComment(buf []byte) (xml.Token, error) {
 	commentEndIdx := bytes.Index(buf, []byte{'-', '-', '>'})
 	if commentEndIdx == -1 || (buf[commentEndIdx-1] == '-' && len(buf) < 7) {
-		return nil, errors.New("comment is not properly formatted")
+		return nil, errCommentNotProperlyFormatted
 	}
 
 	p.innerData.comment = buf[4:commentEndIdx]
@@ -244,6 +247,8 @@ func (p *Parser) decodeDeclaration(buf []byte) (xml.Token, error) {
 	return &p.innerData.directive, nil
 }
 
+var emptyBytes = []byte{}
+
 func (p *Parser) decodeProcessInstruction(buf []byte) (xml.Token, error) {
 	const lenOfPrefix = 2
 	endInstIdx := len(buf) - lenOfPrefix // End of the instruction(end of the tag)
@@ -253,7 +258,7 @@ func (p *Parser) decodeProcessInstruction(buf []byte) (xml.Token, error) {
 		// No space found in token, nothing to do in this case
 		// TODO: this can be better
 		p.innerData.procInst.Target = unsafeByteToString(buf[lenOfPrefix:endInstIdx])
-		p.innerData.procInst.Inst = []byte{}
+		p.innerData.procInst.Inst = emptyBytes
 
 		return &p.innerData.procInst, nil
 	}
@@ -345,7 +350,7 @@ func NextWordIndex(buf []byte) (start, end int, err error) {
 
 	decodedRune, size := utf8.DecodeRune(buf[currPtr:])
 	if !isNameStartChar(decodedRune) {
-		return currPtr, 0, fmt.Errorf("rune is not valid start of name: '%c'", decodedRune)
+		return currPtr, 0, errors.New("rune is not valid start of name: " + strconv.QuoteRune(decodedRune))
 	}
 
 	for {
@@ -363,7 +368,7 @@ func NextWordIndex(buf []byte) (start, end int, err error) {
 		}
 
 		if !isNameChar(decodedRune) {
-			return currPtr, 0, fmt.Errorf("rune is not valid name part: '%c'", decodedRune)
+			return currPtr, 0, errors.New("rune is not valid name part: " + strconv.QuoteRune(decodedRune))
 		}
 	}
 }
