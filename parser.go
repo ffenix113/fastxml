@@ -30,9 +30,6 @@ type TokenDecoderFunc func([]byte) (xml.Token, error)
 type Parser struct {
 	// buf holds full data to parse.
 	buf []byte
-	// innerBuf is a buffer that will hold updated data
-	// when it is needed to be manipulated in any way.
-	innerBuf *bytes.Buffer
 	// lastTagName is the last found open tag name.
 	// This is necessary for self closing tags. For them there will be two events:
 	// startElement and then endElement with the same name.
@@ -62,8 +59,7 @@ func NewParser(buf []byte, mustCopy bool) *Parser {
 	}
 
 	p := Parser{
-		buf:      buf,
-		innerBuf: bytes.NewBuffer(nil),
+		buf: buf,
 	}
 
 	return &p
@@ -137,7 +133,7 @@ func (p *Parser) decodeToken(buf []byte) (xml.Token, error) { //nolint:gocyclo,c
 	case len(buf) >= 11 && buf[0] == '<' && buf[1] == '!' && buf[2] == '[':
 		return p.decodeCdata(buf)
 	case buf[0] == '<' && buf[1] == '?':
-		return nil, nil // No implementation is available currently.
+		return p.decodeProcessInstruction(buf)
 	case buf[0] == '<' && buf[1] == '!':
 		return p.decodeDeclaration(buf) // Some sort of declaration(ignore, element, attrlist, etc).
 	default: // This will be our "catch-all" start tag decoder.
@@ -236,10 +232,41 @@ func (p *Parser) decodeDeclaration(buf []byte) (xml.Token, error) {
 	case bytes.HasPrefix(buf, docTypePrefix),
 		bytes.HasPrefix(buf, elementPrefix),
 		bytes.HasPrefix(buf, attListPrefix):
-		return nil, nil
 	default:
 		return nil, fmt.Errorf("unknown declaration: %s", buf[:NextNonSpaceIndex(buf)])
 	}
+
+	// FIXME: in doctype it seems that comments should be omitted from resulting value.
+	// https://www.w3.org/TR/xml/#dtd
+	// Currently, quite a few tests failing because of it.
+	p.innerData.directive = buf[2 : len(buf)-1]
+
+	return &p.innerData.directive, nil
+}
+
+func (p *Parser) decodeProcessInstruction(buf []byte) (xml.Token, error) {
+	const lenOfPrefix = 2
+	endInstIdx := len(buf) - lenOfPrefix // End of the instruction(end of the tag)
+	endTargetIdx := NextSpaceIndex(buf)  // End of the target name
+
+	if endTargetIdx == -1 {
+		// No space found in token, nothing to do in this case
+		// TODO: this can be better
+		p.innerData.procInst.Target = unsafeByteToString(buf[lenOfPrefix:endInstIdx])
+		p.innerData.procInst.Inst = []byte{}
+
+		return &p.innerData.procInst, nil
+	}
+
+	beginInstIdx := NextNonSpaceIndex(buf[endTargetIdx:])
+
+	target := buf[lenOfPrefix:endTargetIdx]
+	inst := buf[endTargetIdx+beginInstIdx : endInstIdx]
+
+	p.innerData.procInst.Target = unsafeByteToString(target)
+	p.innerData.procInst.Inst = inst
+
+	return &p.innerData.procInst, nil
 }
 
 func decodeTagAttribute(buf []byte) (string, string, int, error) {
@@ -368,9 +395,23 @@ func NextQuotedWordIndex(buf []byte) (start, end int, err error) {
 	return start, start + end + 1, nil
 }
 
+// NextSpaceIndex will return index on which next rune will be space.
+func NextSpaceIndex(buf []byte) (idx int) {
+	for idx < len(buf) {
+		rn, size := utf8.DecodeRune(buf[idx:])
+		if IsHTMLSpaceChar(rn) {
+			return
+		}
+
+		idx += size
+	}
+
+	return -1
+}
+
 // NextNonSpaceIndex will return index on which next rune will be non-space.
 func NextNonSpaceIndex(buf []byte) (idx int) {
-	for {
+	for idx < len(buf) {
 		rn, size := utf8.DecodeRune(buf[idx:])
 		if !IsHTMLSpaceChar(rn) {
 			return
@@ -378,6 +419,8 @@ func NextNonSpaceIndex(buf []byte) (idx int) {
 
 		idx += size
 	}
+
+	return -1
 }
 
 func IsHTMLSpaceChar(rn rune) bool {
@@ -398,18 +441,24 @@ func (p *Parser) cleanEOLChars(buf []byte) []byte {
 		return buf
 	}
 
-	p.innerBuf.Reset()
-	p.innerBuf.Grow(len(buf))
+	var bytesBuf bytes.Buffer
+
+	bytesBuf.Grow(len(buf))
 
 	for {
 		crIdx = bytes.IndexByte(buf, '\r')
 		if crIdx == -1 {
-			p.innerBuf.Write(buf)
+			bytesBuf.Write(buf)
 
-			return p.innerBuf.Bytes()
+			return bytesBuf.Bytes()
 		}
 
-		p.innerBuf.Write(buf[:crIdx])
+		bytesBuf.Write(buf[:crIdx])
+
+		if len(buf) > crIdx && buf[crIdx+1] != '\n' {
+			bytesBuf.WriteByte('\n')
+		}
+
 		buf = buf[crIdx+1:]
 	}
 }

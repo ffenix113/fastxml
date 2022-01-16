@@ -3,7 +3,6 @@ package fastxml
 import (
 	"bytes"
 	"errors"
-	"fmt"
 )
 
 var (
@@ -51,13 +50,13 @@ func FetchNextToken(buf []byte) (data []byte, err error) {
 }
 
 func isSpecialTag(buf []byte) bool {
-	return bytes.HasPrefix(buf, []byte{'<', '!'})
+	return len(buf) >= 2 && buf[0] == '<' && (buf[1] == '!' || buf[1] == '?')
 }
 
 // scanFullTag will return end index of the current tag.
 //
 // It might return error on some broken tags.
-func scanFullTag(buf []byte) (int, error) {
+func scanFullTag(buf []byte) (int, error) { //nolint:unparam // Signature is defined for scan/parse function
 	return nextTokenStartIndex(buf, '>') + 1, nil
 }
 
@@ -70,8 +69,20 @@ func scanSpecial(buf []byte) (int, error) {
 	case bytes.HasPrefix(buf, commentPrefix):
 		return scanComment(buf)
 	default:
-		return 0, fmt.Errorf("unknown declaration: %s", buf[:NextNonSpaceIndex(buf)])
+		return scanProcessingInstruction(buf)
 	}
+}
+
+func scanProcessingInstruction(buf []byte) (int, error) {
+	const lenOfPrefix = 2
+
+	endIdx := bytes.Index(buf, []byte{'?', '>'})
+
+	if endIdx == -1 {
+		return 0, errors.New("no closing bytes found for PI")
+	}
+
+	return endIdx + lenOfPrefix, nil
 }
 
 func scanCDATADeclaration(buf []byte) (int, error) {
@@ -102,7 +113,7 @@ func scanComment(buf []byte) (int, error) {
 }
 
 // scanFulLCharData will return end index of char data.
-func scanFullCharData(buf []byte) (int, error) {
+func scanFullCharData(buf []byte) (int, error) { //nolint:unparam // Signature is defined for scan/parse function
 	if len(buf) == 0 {
 		return 0, nil
 	}

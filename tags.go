@@ -3,7 +3,13 @@ package fastxml
 import (
 	"encoding/xml"
 	"io"
+	"strings"
 )
+
+// MinAttrLen specifies minimum possible of chars for valid attribute.
+//
+// 1 char name, 1 char equal sign, 2 quotes.
+const MinAttrLen = 4
 
 // This types are defined to "replace" std XML types in favor of custom ones.
 // In future this can be beneficial because it will allow to do more things with them.
@@ -40,7 +46,7 @@ func (s *StartToken) HasAttributes() bool {
 //
 // So tag with these attributes will be properly parsed: <a a='1' a='2'>, with two attributes being returned: a=1, a=2.
 func (s *StartToken) NextAttribute() (attrName, attrVal string, err error) {
-	if len(s.attrBuf) <= 4 {
+	if len(s.attrBuf) <= MinAttrLen {
 		return "", "", io.EOF
 	}
 
@@ -54,27 +60,32 @@ func (s *StartToken) NextAttribute() (attrName, attrVal string, err error) {
 	return
 }
 
-type ErrNoSuchAttribute string
+type NoSuchAttributeError string
 
-func (a ErrNoSuchAttribute) Error() string {
+func (a NoSuchAttributeError) Error() string {
 	return "no such attribute found: " + string(a)
 }
 
 // GetAttribute will return first value attached to an attribute name and true,
 // or empty string and false.
 func (s *StartToken) GetAttribute(name string) (value string, err error) {
-	var nextAttrIdx int
-	var skipIdx int
-	var attrName string
+	var (
+		nextAttrIdx, skipIdx int
+		attrName             string
+	)
 
 	for {
-		if len(s.attrBuf)-skipIdx <= 4 {
-			return "", ErrNoSuchAttribute(name)
+		if len(s.attrBuf)-skipIdx <= MinAttrLen {
+			return "", NoSuchAttributeError(name)
 		}
 
 		attrName, value, skipIdx, err = decodeTagAttribute(s.attrBuf[nextAttrIdx:])
 		if err != nil {
 			return "", err
+		}
+
+		if colIdx := strings.IndexByte(attrName, ':'); colIdx != -1 {
+			attrName = attrName[colIdx+1:]
 		}
 
 		if attrName == name {

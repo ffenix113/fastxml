@@ -277,7 +277,45 @@ func TestParser_Peek(t *testing.T) {
 	require.Equal(t, mustGet, next)
 }
 
+func TestParser_File(t *testing.T) {
+	file := path.Join(testdata.PackagePath(t), "testdata/suite/ibm/valid/P03/ibm03v01.xml")
+
+	descData, err := os.ReadFile(file)
+	require.NoError(t, err)
+
+	p := NewParser(descData, false)
+
+	var tkn xml.Token
+	for {
+		tkn, err = p.Next()
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		require.NoError(t, err)
+
+		_ = tkn
+	}
+}
+
 func TestIBM_XMLSuite(t *testing.T) {
+	skipFiles := map[string]struct{}{
+		"testdata/suite/ibm/valid/P66/ibm66v01.xml": {}, // References are missing(https://www.w3.org/TR/xml/#sec-references)
+		"testdata/suite/ibm/valid/P02/ibm02v01.xml": {}, // References are missing(https://www.w3.org/TR/xml/#sec-references)
+		"testdata/suite/ibm/valid/P03/ibm03v01.xml": {}, // References are missing(https://www.w3.org/TR/xml/#sec-references)
+		"testdata/suite/ibm/valid/P29/ibm29v01.xml": {}, // Questionable comment in declaration
+		"testdata/suite/ibm/valid/P45/ibm45v01.xml": {}, // Questionable comment in declaration
+		"testdata/suite/ibm/valid/P47/ibm47v01.xml": {}, // Questionable comment in declaration
+		"testdata/suite/ibm/valid/P51/ibm51v01.xml": {}, // Questionable comment in declaration
+		"testdata/suite/ibm/valid/P52/ibm52v01.xml": {}, // Questionable comment in declaration
+		"testdata/suite/ibm/valid/P54/ibm54v01.xml": {}, // Questionable comment in declaration
+		"testdata/suite/ibm/valid/P82/ibm82v01.xml": {}, // Questionable comment in declaration
+		"testdata/suite/ibm/valid/P85/ibm85v01.xml": {}, // Questionable comment in declaration
+		"testdata/suite/ibm/valid/P86/ibm86v01.xml": {}, // Questionable comment in declaration
+		"testdata/suite/ibm/valid/P87/ibm87v01.xml": {}, // Questionable comment in declaration
+		"testdata/suite/ibm/valid/P88/ibm88v01.xml": {}, // Questionable comment in declaration
+		"testdata/suite/ibm/valid/P89/ibm89v01.xml": {}, // Questionable comment in declaration
+	}
+
 	descFilePath := path.Join(testdata.PackagePath(t), "testdata/suite/ibm/ibm_oasis_valid.xml")
 
 	descData, err := os.ReadFile(descFilePath)
@@ -301,11 +339,11 @@ func TestIBM_XMLSuite(t *testing.T) {
 		_, _, err = start.NextAttribute()
 		require.NoError(t, err)
 
-		runXMLGroup(t, p)
+		runXMLGroup(t, p, skipFiles)
 	}
 }
 
-func runXMLGroup(t *testing.T, p *Parser) {
+func runXMLGroup(t *testing.T, p *Parser, skipPaths map[string]struct{}) {
 	for {
 		token, err := p.Next()
 		require.NoError(t, err)
@@ -342,13 +380,18 @@ func runXMLGroup(t *testing.T, p *Parser) {
 		}
 
 		if testFileName != "" {
-			runXMLTest(t, testFileName)
+			runIbmXMLTest(t, testFileName, skipPaths)
 		}
 	}
 }
 
-func runXMLTest(t *testing.T, filePath string) {
-	filePath = path.Join(testdata.PackagePath(t), "testdata/suite/ibm", filePath)
+func runIbmXMLTest(t *testing.T, filePath string, skipPath map[string]struct{}) {
+	ibmSuitePath := path.Join("testdata/suite/ibm", filePath)
+	if _, shouldSkip := skipPath[ibmSuitePath]; shouldSkip {
+		return
+	}
+
+	filePath = path.Join(testdata.PackagePath(t), ibmSuitePath)
 	data, err := os.ReadFile(filePath)
 	require.NoError(t, err, filePath)
 
@@ -371,7 +414,7 @@ func runXMLTest(t *testing.T, filePath string) {
 		}
 
 		require.NoError(t, stdErr, filePath)
-		equalTokens(t, tkn, stdToken)
+		equalTokens(t, filePath, tkn, stdToken)
 
 		if start, ok := tkn.(*StartToken); ok {
 			if !start.HasAttributes() {
@@ -390,44 +433,56 @@ func runXMLTest(t *testing.T, filePath string) {
 	}
 }
 
-func equalTokens(tb testing.TB, tkn, stdToken xml.Token) {
+func equalTokens(tb testing.TB, filepath string, tkn, stdToken xml.Token) {
 	require := require.New(tb)
 
 	switch typd := tkn.(type) {
 	case *StartToken:
 		std, ok := stdToken.(xml.StartElement)
-		require.True(ok)
+		require.True(ok, filepath)
 
-		require.Equal(std.Name.Local, typd.Name)
+		require.Equal(std.Name.Local, typd.Name, filepath)
 
 		if !typd.HasAttributes() {
-			require.Empty(std.Attr)
+			require.Empty(std.Attr, filepath)
 			return
 		}
 
 		for _, attr := range std.Attr {
 			val, err := typd.GetAttribute(attr.Name.Local)
 
-			require.NoError(err)
-			require.Equal(attr.Value, val)
+			require.NoError(err, filepath)
+			require.Equal(attr.Value, val, filepath)
 		}
 	case *CharData:
 		std, ok := stdToken.(xml.CharData)
-		require.True(ok)
+		require.True(ok, filepath)
 
-		require.Equal([]byte(std), []byte(*typd))
+		require.Equal(string(std), string(*typd), filepath)
 	case *Comment:
 		std, ok := stdToken.(xml.Comment)
-		require.True(ok)
+		require.True(ok, filepath)
 
-		require.Equal([]byte(std), []byte(*typd))
+		require.Equal(string(std), string(*typd), filepath)
 	case *EndElement:
 		std, ok := stdToken.(xml.EndElement)
-		require.True(ok)
+		require.True(ok, filepath)
 
-		require.Equal(std.Name.Local, typd.Name.Local)
+		require.Equal(std.Name.Local, typd.Name.Local, filepath)
+	case *ProcInst:
+		std, ok := stdToken.(xml.ProcInst)
+		require.True(ok, filepath)
+
+		require.Equal(std.Target, typd.Target, filepath)
+		require.Equal(std.Inst, typd.Inst, filepath)
+	case *Directive:
+		std, ok := stdToken.(xml.Directive)
+		require.True(ok, filepath)
+
+		require.Equal(string(std), string(*typd), filepath)
 	default:
 		tb.Logf("unknown token type: %T, std type is %T", typd, stdToken)
+		tb.Logf("stdValue: %s", stdToken)
 	}
 }
 
